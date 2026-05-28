@@ -1,6 +1,6 @@
 {
-  "name": "marksman-local",
-  "description": "Local marketplace hosting the marksman plugin — Set-of-Marks browser control for Claude Code.",
+  "name": "marksman",
+  "description": "Marksman plugin marketplace — Set-of-Marks browser control for Claude Code.",
   "owner": {
     "name": "Jonny Litten"
   },
