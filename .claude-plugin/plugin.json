@@ -2,7 +2,6 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "marksman",
   "displayName": "Marksman",
-  "version": "0.2.2",
   "description": "Set-of-Marks vision-based browser control for Claude Code. Screenshot any page, get numbered labels on every interactive element, click and type by label number instead of fragile coordinates.",
   "author": {
     "name": "Jonny Litten",
