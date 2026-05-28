@@ -15,6 +15,33 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 const SIDECAR_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../omniparser");
+/**
+ * Pick the Python interpreter for the sidecar. Falls through, in order:
+ *
+ *   1. $MARKSMAN_OMNI_PYTHON — explicit override (full path to python binary).
+ *   2. The venv that sits next to $MARKSMAN_OMNIPARSER_PATH. setup-omniparser.sh
+ *      installs the venv at `<parent of repo>/.venv/`, so this is where it
+ *      lives when the user ran setup once and is now installing the plugin
+ *      via marketplace (cache copies don't include the venv).
+ *   3. The venv inside the sidecar dir itself ($CLAUDE_PLUGIN_ROOT/omniparser/.venv).
+ *      This is the local-dev path: setup script run inside the marksman repo.
+ *   4. Bare `python3` on PATH — fails fast with a missing-deps error.
+ */
+function resolvePython() {
+    const override = process.env.MARKSMAN_OMNI_PYTHON;
+    if (override && existsSync(override))
+        return override;
+    const repo = process.env.MARKSMAN_OMNIPARSER_PATH;
+    if (repo) {
+        const sibling = path.join(path.dirname(repo), ".venv/bin/python");
+        if (existsSync(sibling))
+            return sibling;
+    }
+    const local = path.join(SIDECAR_DIR, ".venv/bin/python");
+    if (existsSync(local))
+        return local;
+    return "python3";
+}
 class OmniParserClient {
     proc = null;
     ready = null;
@@ -24,8 +51,7 @@ class OmniParserClient {
         if (this.ready)
             return this.ready;
         this.ready = new Promise((resolve, reject) => {
-            const venvPython = path.join(SIDECAR_DIR, ".venv/bin/python");
-            const python = existsSync(venvPython) ? venvPython : "python3";
+            const python = resolvePython();
             const inferScript = path.join(SIDECAR_DIR, "infer.py");
             if (!existsSync(inferScript)) {
                 return reject(new Error(`OmniParser sidecar not found at ${inferScript}. Run scripts/setup-omniparser.sh first.`));
