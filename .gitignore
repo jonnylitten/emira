@@ -1,0 +1,17 @@
+node_modules/
+*.log
+.DS_Store
+
+# Claude Code's local-user settings, scheduled-task locks, etc.
+.claude/
+
+# Note: dist/ IS tracked — it's a shipping artifact for the plugin
+# (Claude Code runs ${CLAUDE_PLUGIN_ROOT}/dist/server.js).
+
+# OmniParser local install artifacts — recreated by scripts/setup-omniparser.sh
+# (which also re-applies our patches to OmniParser/util/utils.py).
+omniparser/.venv/
+omniparser/OmniParser/
+
+# Local smoke-test output / scratch
+/tmp/marksman/

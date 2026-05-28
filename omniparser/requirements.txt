@@ -1,0 +1,3 @@
+Pillow>=10.0
+# OmniParser itself is installed from its repo (cloned by setup-omniparser.sh).
+# Its own requirements bring torch, transformers, ultralytics, paddleocr, etc.

@@ -1,0 +1,40 @@
+# Minimal OmniParser inference dependencies for marksman.
+#
+# OmniParser's own requirements.txt pulls in gradio, streamlit, anthropic,
+# openai, paddlepaddle, etc. — its demo/agent app stack. We only need the
+# detector + captioner path. Version floors below are picked to guarantee
+# a prebuilt arm64-macOS wheel exists (no source compiles).
+#
+# Skipped vs OmniParser's full requirements.txt:
+#   gradio, streamlit          — demo UI
+#   anthropic, openai, dashscope, groq, boto3, azure-identity, google-auth
+#                              — multi-LLM agent harness
+#   paddlepaddle, paddleocr    — replaced by easyocr (use_paddleocr=False)
+#   pyautogui, screeninfo, uiautomation, pymsgbox
+#                              — desktop-automation deps for OmniParser's
+#                                control demo, not its detector
+#   ruff, pre-commit, pytest   — dev tooling
+
+torch>=2.2
+torchvision>=0.17
+# Florence-2's bundled config/model code targets transformers 4.x. 5.x removes
+# init-order guarantees Florence-2 depends on, and 4.55+ requires a
+# _supports_sdpa attribute Florence-2 doesn't set. 4.45.2 is the known-good.
+transformers==4.45.2
+tokenizers<0.21
+accelerate>=0.30
+ultralytics==8.3.70
+numpy>=1.26,<2.0
+opencv-python-headless>=4.10
+Pillow>=10.0
+easyocr>=1.7
+supervision==0.18.0
+einops==0.8.0
+timm>=0.9
+huggingface_hub>=0.24
+# Required by OmniParser util/utils.py module-level imports even though the
+# OpenAI integration is only used by its agent demos.
+openai>=1.0
+# Bundled cert chain so urllib (easyocr's model fetch) works on Homebrew
+# Python where the system cert store isn't wired up.
+certifi

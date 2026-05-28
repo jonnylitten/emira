@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "marksman",
+  "displayName": "Marksman",
+  "version": "0.2.2",
+  "description": "Set-of-Marks vision-based browser control for Claude Code. Screenshot any page, get numbered labels on every interactive element, click and type by label number instead of fragile coordinates.",
+  "author": {
+    "name": "Jonny Litten",
+    "url": "https://github.com/jonnylitten"
+  },
+  "repository": "https://github.com/jonnylitten/marksman",
+  "license": "MIT",
+  "keywords": ["browser", "automation", "playwright", "vision", "set-of-marks", "web", "scraping"],
+  "userConfig": {
+    "detector": {
+      "type": "string",
+      "title": "Default detector",
+      "description": "dom = fast DOM walker (recommended for standard web UIs). omniparser = vision-based detection that catches canvas/WebGL UIs — requires running scripts/setup-omniparser.sh once. You can still override per-call via the screenshot_mark `detector` argument.",
+      "default": "dom"
+    },
+    "omniparser_path": {
+      "type": "directory",
+      "title": "OmniParser repo path",
+      "description": "Absolute path to a cloned microsoft/OmniParser repository. Only required when detector=omniparser. Leave blank if unused."
+    },
+    "headless": {
+      "type": "boolean",
+      "title": "Headless browser",
+      "description": "Run Chromium without a window. Turn off to watch what marksman does.",
+      "default": true
+    }
+  },
+  "mcpServers": {
+    "marksman": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/server.js"],
+      "env": {
+        "NODE_PATH": "${CLAUDE_PLUGIN_DATA}/node_modules",
+        "MARKSMAN_DETECTOR": "${user_config.detector}",
+        "MARKSMAN_OMNIPARSER_PATH": "${user_config.omniparser_path}",
+        "MARKSMAN_HEADLESS": "${user_config.headless}"
+      }
+    }
+  }
+}
