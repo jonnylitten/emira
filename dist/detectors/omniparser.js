@@ -198,6 +198,20 @@ process.once("exit", killSidecar);
  * Normalize a raw response (which may use varied field names from the Python
  * side) into our DetectedElement shape, and renumber labels sequentially.
  */
+// Florence-2 emits "unanswerable" when it can't caption an icon. Treating
+// that as actual text poisons find_label (e.g. ranking "the unanswerable
+// menu") and clutters label summaries. Blank it out so callers see "no text"
+// rather than literal garbage. Same for the small set of common Florence
+// failure sentinels.
+const CAPTION_BLOCKLIST = new Set(["unanswerable", "unknown", "n/a", "none"]);
+function scrubCaption(raw) {
+    const s = String(raw ?? "").trim();
+    if (!s)
+        return "";
+    if (CAPTION_BLOCKLIST.has(s.toLowerCase()))
+        return "";
+    return s;
+}
 function normalize(raw) {
     return raw
         .map((el) => {
@@ -212,7 +226,7 @@ function normalize(raw) {
                 h: Number(bbox.h ?? bbox.height ?? bbox[3]),
             },
             type: String(el.type ?? el.category ?? "element"),
-            text: String(el.text ?? el.caption ?? el.content ?? "").trim(),
+            text: scrubCaption(el.text ?? el.caption ?? el.content),
             interactive: el.interactivity ?? el.interactive ?? true,
             label: 0,
         };
