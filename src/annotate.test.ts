@@ -24,7 +24,13 @@ function el(
   h: number,
   text = "btn",
 ): DetectedElement {
-  return { label, bbox: { x, y, w, h }, type: "button", text };
+  return {
+    label,
+    bbox: { x, y, w, h },
+    type: "button",
+    text,
+    interactive: true,
+  };
 }
 
 describe("annotateScreenshot", () => {

@@ -17,15 +17,11 @@ What's shipped, what's next, and what's deliberately out of scope. Living docume
 
 Ranked by impact. Pick one at a time.
 
-### 1. Filter OmniParser output by `interactivity`
-OmniParser tags each detected element as interactive (icon) or not (text label). On a Google Maps screenshot it returns ~126 elements — most are static place names that aren't clickable. The marked image becomes unreadable, and `find_label` ranks noise.
+### ~~1. Filter OmniParser output by `interactivity`~~ ✓ shipped
+`interactive_only` arg on `screenshot_mark` / `POST /screenshot`. Default `true` for omniparser (drops static text labels), `false` for dom (no-op). OmniParser sidecar passes through the upstream `interactivity` flag; DOM detector always sets it to `true`. `labels` responses now include the `interactive` field.
 
-**Plan:** Pass through OmniParser's `interactivity` field in `normalize()`. Add an `interactive_only?: boolean` arg to `screenshot_mark` (default `true` for omniparser, no-op for DOM). When set, drop non-interactive elements before annotating.
-
-### 2. Pre-inference region cropping
-`region` currently filters elements AFTER detection. With OmniParser that means a full-page inference (~15s on CPU) even when the caller only wants a corner. Cropping the screenshot BEFORE running detection would 5–10× speedup for targeted detail.
-
-**Plan:** Move the `extract` call in `controller.ts:screenshot()` so cropping happens before `detect()` is invoked. Translate bboxes between region-relative (annotation) and page-absolute (click) coordinates as today.
+### ~~2. Pre-inference region cropping~~ ✓ shipped
+When `region` is set and detector is omniparser, the screenshot is cropped via sharp BEFORE inference. Coords come back in crop space and get translated to page space for the labelMap. DOM path unchanged (it queries the live page, not the screenshot). Saved screenshot dimensions match the region exactly.
 
 ### 3. Multi-tab support
 Single-tab is fine for one-off flows but fails for any task that needs to compare two pages, follow a popup, or keep an auth context alive while opening links. Currently a click that opens `_blank` is invisible to us.
@@ -37,15 +33,11 @@ The fuzzy-text ranker is fine for clear queries ("submit button") but ties on am
 
 **Plan:** Add intent-detection pass in `scoring.ts` — keywords like "type", "enter", "search for" → boost score for input/textarea types. Keep it small; full NLU is overkill.
 
-### 5. `main_content_only` on `get_page_text`
-Wikipedia and similar sites prefix the body innerText with ~300 chars of nav/donate chrome. Agents currently bump `max_chars` to compensate, wasting tokens.
+### ~~5. `main_content_only` on `get_page_text`~~ ✓ shipped
+Optional `main_content_only` arg. Prefers `<main>` / `<article>` / `[role="main"]` over `<body>`, falls back to body when no semantic root is found.
 
-**Plan:** Optional `main_content_only?: boolean` arg. When true, prefer `<main>`, `<article>`, or `[role="main"]` element's innerText if present; fall back to body. Document the heuristic in the tool description so the model can disable it for sites with broken semantics.
-
-### 6. Detector cost reporting
-Surface the detection latency in the response text so the agent learns when DOM is enough vs when OmniParser pays off. Currently invisible.
-
-**Plan:** Time the `detect()` call in `controller.ts:screenshot()`. Include `Detection: 12.4s` in the MCP response and a `detect_ms` field in the HTTP response.
+### ~~6. Detector cost reporting~~ ✓ shipped
+`detect_ms` returned in HTTP response; MCP response text now includes `Detector: omniparser (12400ms)` so the model learns relative cost without instrumentation.
 
 ## Longer-term
 

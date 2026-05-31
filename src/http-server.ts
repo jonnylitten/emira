@@ -73,6 +73,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       fullpage: body.fullpage,
       region: body.region,
       detector: body.detector,
+      interactive_only: body.interactive_only,
     });
     const imagePath = path.join(SHOT_DIR, `shot-${++shotCounter}.png`);
     writeFileSync(imagePath, result.image);
@@ -81,10 +82,12 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       image_path: imagePath,
       url: result.url,
       detector: result.detector,
+      detect_ms: result.detect_ms,
       labels: result.elements.map((el) => ({
         label: el.label,
         type: el.type,
         text: el.text.slice(0, 120),
+        interactive: el.interactive,
       })),
     });
   }
@@ -145,7 +148,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
   }
 
   if (url === "/get_text") {
-    const text = await m.getPageText(body.label);
+    const text = await m.getPageText(body.label, body.main_content_only);
     const limit = body.max_chars ?? 4000;
     const truncated = text.length > limit;
     return send(res, 200, {

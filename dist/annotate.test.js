@@ -14,7 +14,13 @@ async function blankPng(width, height) {
         .toBuffer();
 }
 function el(label, x, y, w, h, text = "btn") {
-    return { label, bbox: { x, y, w, h }, type: "button", text };
+    return {
+        label,
+        bbox: { x, y, w, h },
+        type: "button",
+        text,
+        interactive: true,
+    };
 }
 describe("annotateScreenshot", () => {
     it("returns a valid PNG with the original dimensions", async () => {

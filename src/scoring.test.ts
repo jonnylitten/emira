@@ -7,7 +7,13 @@ function el(
   type: string,
   text: string,
 ): DetectedElement {
-  return { label, bbox: { x: 0, y: 0, w: 10, h: 10 }, type, text };
+  return {
+    label,
+    bbox: { x: 0, y: 0, w: 10, h: 10 },
+    type,
+    text,
+    interactive: true,
+  };
 }
 
 describe("scoreElements", () => {

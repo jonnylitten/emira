@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { scoreElements } from "./scoring.js";
 function el(label, type, text) {
-    return { label, bbox: { x: 0, y: 0, w: 10, h: 10 }, type, text };
+    return {
+        label,
+        bbox: { x: 0, y: 0, w: 10, h: 10 },
+        type,
+        text,
+        interactive: true,
+    };
 }
 describe("scoreElements", () => {
     const elements = [

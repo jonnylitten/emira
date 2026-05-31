@@ -213,6 +213,7 @@ function normalize(raw) {
             },
             type: String(el.type ?? el.category ?? "element"),
             text: String(el.text ?? el.caption ?? el.content ?? "").trim(),
+            interactive: el.interactivity ?? el.interactive ?? true,
             label: 0,
         };
     })

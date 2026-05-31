@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { performance } from "node:perf_hooks";
 import { getPage } from "./browser.js";
 import { annotateScreenshot } from "./annotate.js";
 import { scoreElements } from "./scoring.js";
@@ -29,24 +30,61 @@ export class Marksman {
         }
         if (opts.wait_ms)
             await page.waitForTimeout(opts.wait_ms);
-        let buf = await page.screenshot({
+        const fullBuf = await page.screenshot({
             type: "png",
             fullPage: Boolean(opts.fullpage),
         });
         const detectorName = opts.detector ?? defaultDetector();
-        let elements = await detect(detectorName, { page, screenshot: buf });
-        // Region cropping: filter elements to those intersecting the region,
-        // crop the image to the region, and shift bboxes to region-relative for
-        // annotation. Click coords stay in page space (the labelMap holds the
-        // original bbox); only the annotated image uses shifted coords.
-        let annotationElements = elements;
-        if (opts.region) {
-            const r = opts.region;
-            elements = elements.filter((el) => bboxIntersects(el.bbox, r));
-            buf = await sharp(buf)
+        const r = opts.region;
+        // Crop BEFORE detection when the detector reads from the screenshot
+        // (omniparser). Saves 5–10× on OmniParser inference time when the caller
+        // only wants a corner of the page. DOM detector ignores the screenshot
+        // buffer (it queries the live page), so cropping there is post-detection.
+        const cropBeforeDetect = !!r && detectorName === "omniparser";
+        const detectionBuf = cropBeforeDetect
+            ? await sharp(fullBuf)
                 .extract({ left: r.x, top: r.y, width: r.w, height: r.h })
                 .png()
-                .toBuffer();
+                .toBuffer()
+            : fullBuf;
+        const t0 = performance.now();
+        let elements = await detect(detectorName, {
+            page,
+            screenshot: detectionBuf,
+        });
+        const detect_ms = Math.round(performance.now() - t0);
+        // When detection ran on a crop, coords come back relative to the crop —
+        // translate them into page space so labelMap clicks land correctly.
+        if (cropBeforeDetect && r) {
+            elements = elements.map((el) => ({
+                ...el,
+                bbox: {
+                    x: el.bbox.x + r.x,
+                    y: el.bbox.y + r.y,
+                    w: el.bbox.w,
+                    h: el.bbox.h,
+                },
+            }));
+        }
+        // DOM detector with region: detection happened on the live page, so coords
+        // are already page-space — just filter to those intersecting the region.
+        if (r && detectorName === "dom") {
+            elements = elements.filter((el) => bboxIntersects(el.bbox, r));
+        }
+        // Interactive-only filter. Default is detector-dependent: OmniParser
+        // returns lots of static text labels (place names, road labels) that
+        // aren't clickable; default true cleans that up. DOM detector only ever
+        // returns interactive elements so the flag is a no-op there.
+        const interactiveOnly = opts.interactive_only ?? detectorName === "omniparser";
+        if (interactiveOnly) {
+            elements = elements.filter((el) => el.interactive);
+        }
+        // Build the annotated image. If the region cropped the output, shift
+        // bboxes to crop-relative coords for the visual labels; click coords stay
+        // in page space via labelMap.
+        const outputBuf = r ? await ensureCropped(fullBuf, r) : fullBuf;
+        let annotationElements = elements;
+        if (r) {
             annotationElements = elements.map((el) => ({
                 ...el,
                 bbox: {
@@ -57,7 +95,7 @@ export class Marksman {
                 },
             }));
         }
-        // Renumber sequentially after filtering.
+        // Renumber sequentially after all filters.
         elements = elements.map((el, i) => ({ ...el, label: i + 1 }));
         annotationElements = annotationElements.map((el, i) => ({
             ...el,
@@ -67,12 +105,13 @@ export class Marksman {
         this.elements = elements;
         for (const el of elements)
             this.labelMap[el.label] = el.bbox;
-        const marked = await annotateScreenshot(buf, annotationElements);
+        const marked = await annotateScreenshot(outputBuf, annotationElements);
         return {
             image: marked,
             elements,
             url: page.url(),
             detector: detectorName,
+            detect_ms,
         };
     }
     async click(label) {
@@ -144,7 +183,7 @@ export class Marksman {
         await page.waitForLoadState(state, timeout ? { timeout } : undefined);
         return { url: page.url() };
     }
-    async getPageText(label) {
+    async getPageText(label, mainOnly = false) {
         if (label !== undefined) {
             const el = this.elements.find((e) => e.label === label);
             if (!el)
@@ -152,6 +191,16 @@ export class Marksman {
             return el.text;
         }
         const page = await getPage();
+        if (mainOnly) {
+            // Prefer semantic main-content roots over <body>. Saves ~300 chars of
+            // Wikipedia-style nav/donate chrome that otherwise eats up max_chars.
+            return await page.evaluate(() => {
+                const main = document.querySelector("main") ??
+                    document.querySelector("article") ??
+                    document.querySelector('[role="main"]');
+                return (main ?? document.body).innerText;
+            });
+        }
         return await page.evaluate(() => document.body.innerText);
     }
     requireLabel(label) {
@@ -161,6 +210,12 @@ export class Marksman {
         }
         return bbox;
     }
+}
+async function ensureCropped(buf, r) {
+    return await sharp(buf)
+        .extract({ left: r.x, top: r.y, width: r.w, height: r.h })
+        .png()
+        .toBuffer();
 }
 let instance = null;
 export function getMarksman() {

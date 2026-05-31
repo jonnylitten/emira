@@ -65,6 +65,7 @@ class StubDetector:
                 "bbox": {"x": w // 4, "y": h // 4, "w": w // 2, "h": h // 2},
                 "type": "stub",
                 "text": "OMNIPARSER_STUB",
+                "interactivity": True,
             }
         ]
 
@@ -156,6 +157,10 @@ class OmniParserDetector:
                     "text": str(
                         entry.get("content") or entry.get("text") or ""
                     ),
+                    # OmniParser tags icons interactivity=True, static OCR
+                    # text interactivity=False. Default True if missing so
+                    # unknown shapes don't get silently filtered.
+                    "interactivity": bool(entry.get("interactivity", True)),
                 }
             )
         return out

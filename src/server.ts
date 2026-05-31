@@ -35,9 +35,16 @@ server.tool(
       .describe(
         "Override the default detector. 'dom' walks the live DOM (fast, no setup). 'omniparser' uses a visual model (catches canvas/WebGL UIs; requires Python sidecar — run scripts/setup-omniparser.sh first). Default comes from MARKSMAN_DETECTOR env, falling back to 'dom'.",
       ),
+    interactive_only: z
+      .boolean()
+      .optional()
+      .describe(
+        "Drop non-interactive detections (e.g., OmniParser's static text labels on maps) before labeling. Default: true for omniparser (cuts noise), false for dom (no-op).",
+      ),
   },
   async (args) => {
-    const { image, elements, url, detector } = await m.screenshot(args);
+    const { image, elements, url, detector, detect_ms } =
+      await m.screenshot(args);
     const summary = elements
       .slice(0, 40)
       .map(
@@ -56,7 +63,7 @@ server.tool(
         {
           type: "text",
           text:
-            `URL: ${url}\nDetector: ${detector}\nFound ${elements.length} interactive elements.\n` +
+            `URL: ${url}\nDetector: ${detector} (${detect_ms}ms)\nFound ${elements.length} interactive elements.\n` +
             summary +
             (elements.length > 40
               ? `\n…and ${elements.length - 40} more.`
@@ -254,9 +261,15 @@ server.tool(
       .positive()
       .optional()
       .describe("Truncate output to this many characters. Default: 4000."),
+    main_content_only: z
+      .boolean()
+      .optional()
+      .describe(
+        "Prefer <main> / <article> / [role=main] over <body>. Trims site chrome (nav, footer, donate banners). Heuristic — falls back to <body> if no semantic root is found.",
+      ),
   },
-  async ({ label, max_chars }) => {
-    const text = await m.getPageText(label);
+  async ({ label, max_chars, main_content_only }) => {
+    const text = await m.getPageText(label, main_content_only);
     const limit = max_chars ?? 4000;
     const out =
       text.length > limit

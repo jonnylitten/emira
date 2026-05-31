@@ -129,6 +129,7 @@ export async function detectInteractiveElements(page) {
         bbox: el.bbox,
         type: el.type,
         text: el.text,
+        interactive: true, // DOM walker only emits elements from the interactive selector set
     }));
 }
 //# sourceMappingURL=detect.js.map
