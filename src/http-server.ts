@@ -7,6 +7,7 @@
 //   POST /click        {label}                                   -> {ok, x, y}
 //   POST /type         {label, text, clear?}                     -> {ok}
 //   POST /upload       {label, path, timeout_ms?}                -> {ok, count}
+//   POST /clear_profile                                          -> {ok, profile_dir}
 //   POST /scroll       {direction, amount?}                      -> {ok}
 //   POST /find_label   {description, limit?}                     -> {matches[]}
 //   POST /get_text     {label?, max_chars?}                      -> {text}
@@ -151,6 +152,11 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
   if (url === "/wait_for_load") {
     const r = await m.waitForLoad(body.state ?? "load", body.timeout_ms);
     return send(res, 200, { ok: true, url: r.url });
+  }
+
+  if (url === "/clear_profile") {
+    const { profileDir } = await m.clearProfile();
+    return send(res, 200, { ok: true, profile_dir: profileDir });
   }
 
   if (url === "/get_text") {

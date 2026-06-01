@@ -27,6 +27,11 @@
       "title": "Headless browser",
       "description": "Run Chromium without a window. Turn off to watch what marksman does.",
       "default": true
+    },
+    "profile_dir": {
+      "type": "directory",
+      "title": "Browser profile directory",
+      "description": "Where cookies, localStorage, and download state persist between sessions. Defaults to ${CLAUDE_PLUGIN_DATA}/profile (survives plugin updates). Set to a custom path if you want to share a profile across machines or back it up. Leave blank for the default."
     }
   },
   "mcpServers": {
@@ -35,9 +40,11 @@
       "args": ["${CLAUDE_PLUGIN_ROOT}/dist/server.js"],
       "env": {
         "NODE_PATH": "${CLAUDE_PLUGIN_DATA}/node_modules",
+        "CLAUDE_PLUGIN_DATA": "${CLAUDE_PLUGIN_DATA}",
         "MARKSMAN_DETECTOR": "${user_config.detector}",
         "MARKSMAN_OMNIPARSER_PATH": "${user_config.omniparser_path}",
-        "MARKSMAN_HEADLESS": "${user_config.headless}"
+        "MARKSMAN_HEADLESS": "${user_config.headless}",
+        "MARKSMAN_PROFILE_DIR": "${user_config.profile_dir}"
       }
     }
   }

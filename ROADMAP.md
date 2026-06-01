@@ -53,14 +53,12 @@ Many automation tasks fail not because the UI is hard but because authentication
 #### ~~8. File upload~~ ✓ shipped
 `upload_at_label(label, path, timeout_ms?)` on MCP / `POST /upload` on HTTP. Two-strategy implementation: first tries `setInputFiles` after resolving the bbox-center element via `elementFromPoint` (handles both direct `<input type="file">` clicks and `<label for=...>` clicks). Falls back to arming a `filechooser` event listener before clicking — handles buttons/links that open a file dialog. `path` accepts single string or array (for multi-file inputs). Verified end-to-end against `the-internet.herokuapp.com/upload`.
 
-#### 10. Session / profile persistence
-*(Promoted from Longer-term per the 2026-05-31 priority decision.)*
+#### ~~10. Session / profile persistence~~ ✓ shipped
+Swapped `chromium.launch()` for `chromium.launchPersistentContext()`. Profile dir resolved by priority: `MARKSMAN_PROFILE_DIR` env > `$CLAUDE_PLUGIN_DATA/profile` (plugin mode, survives updates) > `~/.cache/marksman/profile` (dev/standalone). Plugin manifest exposes a `profile_dir` userConfig knob.
 
-Authenticated automation tasks today have to log in fresh every session — Playwright's default browser context is ephemeral. Persisting cookies + localStorage across runs unlocks "log me into X once, then run automation across multiple sessions" workflows.
+New `clear_profile` MCP tool / `POST /clear_profile` HTTP endpoint — wipes the dir and restarts with a fresh context (logout-like). Verified end-to-end: localStorage persists across separate Node processes on https origins; `clear_profile` wipes the dir; next `getPage()` recreates it clean.
 
-**Plan:** Use Playwright's persistent context via `chromium.launchPersistentContext(userDataDir)` instead of the current ephemeral `chromium.launch()`. Default `userDataDir` to `${CLAUDE_PLUGIN_DATA}/profile/` so it survives plugin updates. Expose `MARKSMAN_PROFILE_DIR` env override and a userConfig knob. Tools to clear it on demand (logout-like): `clear_profile()`. ~50 LOC including the launch path swap.
-
-**Risk to flag:** persistent contexts are slower to launch (~1–2s vs ~300ms) because they replay the on-disk state. Acceptable for the use case but worth measuring.
+**Caveat shipped with it:** file:// URLs don't persist localStorage in chromium's user-data dir (file origins partition differently). https origins work as expected. Persistent contexts take ~1s longer to launch than ephemeral ones.
 
 #### 9. `run_javascript` escape hatch
 For everything marksman doesn't have a tool for. Read a localStorage key, dismiss a custom dialog, scroll a non-`window` container. Currently the agent has no way to reach into the page beyond the labeled UI.

@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { performance } from "node:perf_hooks";
-import { getPage } from "./browser.js";
+import { getPage, clearProfile, getProfileDir } from "./browser.js";
 import { annotateScreenshot } from "./annotate.js";
 import { scoreElements } from "./scoring.js";
 import { bboxIntersects } from "./geometry.js";
@@ -235,6 +235,16 @@ export class Marksman {
         const page = await getPage();
         await page.waitForLoadState(state, timeout ? { timeout } : undefined);
         return { url: page.url() };
+    }
+    async clearProfile() {
+        // Reset the persistent context — wipes cookies, localStorage, IndexedDB,
+        // etc. Also clears the in-memory label map since the browser is restarted.
+        this.labelMap = {};
+        this.elements = [];
+        return await clearProfile();
+    }
+    profileDir() {
+        return getProfileDir();
     }
     async getPageText(label, mainOnly = false) {
         if (label !== undefined) {

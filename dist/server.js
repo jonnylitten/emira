@@ -194,6 +194,17 @@ server.tool("wait_for_load", "Wait for the page to reach a load state. Use after
         ],
     };
 });
+server.tool("clear_profile", "Wipe the persistent browser profile (cookies, localStorage, IndexedDB, downloads). The next screenshot will see a fresh browser as if you'd never logged into anything. Use for logout-like operations or to reset between unrelated automation runs. The profile directory itself stays — only its contents are cleared.", {}, async () => {
+    const { profileDir } = await m.clearProfile();
+    return {
+        content: [
+            {
+                type: "text",
+                text: `Profile cleared at ${profileDir}. Next action will spawn a fresh browser context.`,
+            },
+        ],
+    };
+});
 server.tool("get_page_text", "Return the readable text of the current page (innerText of body), or the text of a single labeled element if `label` is given. Use to read content (search results, JSON responses, article body) without a screenshot.", {
     label: z.number().int().positive().optional(),
     max_chars: z
