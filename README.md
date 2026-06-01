@@ -34,6 +34,50 @@ Set-of-Marks browser control for LLM agents. Marksman takes a screenshot, overla
 
 \* Within a single screenshot. The label map is rebuilt on every `screenshot_mark` call, so any DOM-changing action (click, navigate, scroll) invalidates the previous labels — always re-screenshot before the next interaction.
 
+## How marksman compares
+
+The closest direct comparison is [adityasasidhar/browsercontrol](https://github.com/adityasasidhar/browsercontrol) — the only other MCP server I've found doing Set-of-Marks specifically. (CAMEL's Hybrid Browser Toolkit has a similar idea but ships as a Python toolkit, not an MCP server.) Everything else (Playwright MCP, BrowserMCP, Blueprint MCP, Anchor Browser) uses DOM/accessibility trees with no visual annotation.
+
+| | Marksman | BrowserControl |
+|---|---|---|
+| Stack | Node / TypeScript / MCP SDK | Python / FastMCP |
+| Browser | Playwright + Chromium | Playwright + Chromium |
+| Detector | DOM walker **+ OmniParser vision fallback** | DOM walker only |
+| Selector list | ~17 selectors | ~13 selectors (similar shape) |
+| Annotation | sharp + SVG composite | PIL/Pillow |
+| Nested-element suppression | ✓ | ✗ |
+| Form `<label>` text merge into inputs | ✓ | ✗ |
+| Disabled-state filter | ✓ | ✗ |
+| Persistent profile (cookies, localStorage) | ✓ (default; `clear_profile`) | ✓ |
+| Cookie tools | ✓ (`get`/`set`/scoped `clear`) | ✓ |
+| Multi-tab + auto-registered popups | ✓ (popups via `context.on('page')`) | ✓ |
+| File upload | ✓ (`upload_at_label`) | ✓ |
+| Arbitrary JS escape hatch | ✓ (`run_javascript`) | ✓ (`run_javascript`) |
+| Natural-language label lookup | ✓ (`find_label`) | ✗ |
+| Read page text without screenshot | ✓ (`get_page_text` + `main_content_only`) | ✗ |
+| Detector cost reporting | ✓ (`detect_ms` in response) | ✗ |
+| Pre-inference region cropping | ✓ (5–10× faster OmniParser on partial pages) | n/a (no vision) |
+| iframe traversal | ✗ | ✗ |
+| Session recording / replay | ✗ (in roadmap) | ✓ (Playwright trace) |
+| DevTools (console, network, perf) | ✗ | ✓ (~8 tools) |
+| HTTP control surface | ✓ (port 17542, full toolkit) | ✗ |
+| Distribution | Claude Code plugin (auto-installs deps on first session) | PyPI (`pip install browsercontrol`) |
+| Tool count | 21 | ~40 |
+
+**Where marksman's unique:**
+- **OmniParser detector for canvas/WebGL** — clickable elements in Figma, Google Maps map markers, Three.js apps, WebGL games. No other SoM MCP server has visual detection. ~60s/inference cost so it's a break-glass option, but unique.
+- **`find_label`** — natural-language ranking over the last screenshot's labels. "click the submit button" instead of label-number bookkeeping.
+- **`get_page_text` with `main_content_only`** — skip Wikipedia/Medium/news-site chrome, read just the article body. No round-trip through a screenshot.
+- **HTTP control surface** — drive marksman from any language/runtime, not just MCP-speaking agents. Same actions, JSON over `:17542`.
+- **DOM detector heuristics** — nested-element suppression, `<label>`-text merging into form controls, disabled filtering, hidden-element filtering. Cleaner labels on form-heavy pages.
+
+**Where BrowserControl still wins:**
+- DevTools surface (~8 tools — console logs, network requests, performance, errors, cookie management UI).
+- Session recording via Playwright trace.
+- Tool count on the long tail of less-common operations.
+
+**Honest read:** for "agent automates a canvas/WebGL app" (Figma, Maps, web games), marksman is structurally the right pick — BrowserControl can't see those. For "agent automates a deeply-instrumented debugging session" (capture network requests, replay later, inspect perf), BrowserControl has the breadth. For everyday web automation, both are fine; pick on language preference (Python vs Node) or whether you want the natural-language label lookup.
+
 ## Install
 
 Marksman is a Claude Code plugin. Two ways to install:

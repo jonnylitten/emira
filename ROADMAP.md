@@ -47,7 +47,11 @@ Optional `main_content_only` arg. Prefers `<main>` / `<article>` / `[role="main"
 
 ### Parity-with-BrowserControl pack
 
-After comparing marksman against [adityasasidhar/browsercontrol](https://github.com/adityasasidhar/browsercontrol) — the only other MCP server I've found doing Set-of-Marks specifically — the architecture/detector story is essentially the same (DOM-walk SoM, same selector list, no vision fallback there). BrowserControl's edge is breadth of tool surface: it ships ~40 tools vs marksman's 11. Items below are the ones worth borrowing, ranked by how often they'd unblock a real flow.
+Borrowed-feature ideas surfaced from a 2026-05-31 comparison against [adityasasidhar/browsercontrol](https://github.com/adityasasidhar/browsercontrol), the only other MCP server doing Set-of-Marks. All items in this pack shipped by 2026-06-01.
+
+**Status as of 2026-06-01:** Marksman went from 11 → 21 tools, closing the table-stakes gaps (multi-tab, cookies, file upload, persistent profile, JS escape hatch) while keeping its unique edges (OmniParser detector, `find_label`, `get_page_text`, HTTP control surface). Where it's still behind: BrowserControl's DevTools surface (console/network/perf — not in roadmap) and session recording (longer-term).
+
+See the current comparison table in [README.md → "How marksman compares"](./README.md#how-marksman-compares). The items below are kept here for historical/citation continuity.
 
 #### ~~7. Cookie tools~~ ✓ shipped
 Three tools: `get_cookies(urls?)`, `set_cookie({name, value, url?|domain?, ...})`, `clear_cookies({name?, domain?, path?})`. Context-level (no `tab_id` — cookies are shared across all tabs in the BrowserContext). All thin wrappers over Playwright's `context.cookies()` / `context.addCookies()` / `context.clearCookies()`. Smoke-tested against httpbin: read, set, scoped clear, full clear all behave correctly.
