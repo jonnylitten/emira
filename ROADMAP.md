@@ -17,6 +17,8 @@ What's shipped, what's next, and what's deliberately out of scope. Living docume
 
 Ranked by impact. Pick one at a time.
 
+**Priority order (set 2026-05-31):** file upload → session persistence → multi-tab → everything else. Numbers below reflect the original sequencing for citation continuity, not priority.
+
 ### ~~1. Filter OmniParser output by `interactivity`~~ ✓ shipped
 `interactive_only` arg on `screenshot_mark` / `POST /screenshot`. Default `true` for omniparser (drops static text labels), `false` for dom (no-op). OmniParser sidecar passes through the upstream `interactivity` flag; DOM detector always sets it to `true`. `labels` responses now include the `interactive` field.
 
@@ -53,6 +55,15 @@ Common ask ("upload this PDF to the form") that currently has no path through ma
 
 **Plan:** New `upload_to_label(label, path)` tool. Resolves the labeled element's selector via the existing bbox → DOM-element bridge, calls `setInputFiles(path)`. Path is on the marksman host's filesystem (since that's where Playwright runs). ~40 LOC.
 
+#### 10. Session / profile persistence
+*(Promoted from Longer-term per the 2026-05-31 priority decision.)*
+
+Authenticated automation tasks today have to log in fresh every session — Playwright's default browser context is ephemeral. Persisting cookies + localStorage across runs unlocks "log me into X once, then run automation across multiple sessions" workflows.
+
+**Plan:** Use Playwright's persistent context via `chromium.launchPersistentContext(userDataDir)` instead of the current ephemeral `chromium.launch()`. Default `userDataDir` to `${CLAUDE_PLUGIN_DATA}/profile/` so it survives plugin updates. Expose `MARKSMAN_PROFILE_DIR` env override and a userConfig knob. Tools to clear it on demand (logout-like): `clear_profile()`. ~50 LOC including the launch path swap.
+
+**Risk to flag:** persistent contexts are slower to launch (~1–2s vs ~300ms) because they replay the on-disk state. Acceptable for the use case but worth measuring.
+
 #### 9. `run_javascript` escape hatch
 For everything marksman doesn't have a tool for. Read a localStorage key, dismiss a custom dialog, scroll a non-`window` container. Currently the agent has no way to reach into the page beyond the labeled UI.
 
@@ -70,8 +81,8 @@ Currently the repo is private and installation requires being a collaborator. Fl
 
 **Plan:** Public flip is one CLI command (`gh repo edit --visibility public`). Gate on: (a) at least one external test on a Linux + nvidia box, (b) a CI run that validates the plugin builds clean, (c) a release with a real `version` field so installs are reproducible.
 
-### Session persistence
-Save labelMaps + screenshots to disk so a run that goes wrong can be replayed step-by-step for debugging. Useful for the next time an agent loop falls over and we want to see exactly which screenshot the model misread.
+### Session recording (replay debugging)
+Save labelMaps + screenshots to disk so a run that goes wrong can be replayed step-by-step. Distinct from item 10 (browser-state persistence): this is dev-time observability, not user-state continuity.
 
 **Plan:** Opt-in `MARKSMAN_RECORD_DIR` env var. Write each `screenshot_mark` result + each action to a JSONL log in that dir. Add a `scripts/replay.mjs` driver.
 
