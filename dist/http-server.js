@@ -18,6 +18,9 @@
 //   POST /forward      {tab_id?}                                 -> {ok, url, tab_id}
 //   POST /wait_for_load {state?, timeout_ms?, tab_id?}           -> {ok, url, tab_id}
 //   POST /clear_profile                                          -> {ok, profile_dir}
+//   POST /get_cookies  {urls?}                                   -> {cookies[]}
+//   POST /set_cookie   {name, value, url? | domain?, ...}        -> {ok}
+//   POST /clear_cookies {name?, domain?, path?}                  -> {cleared}
 //   POST /run_javascript {code, await_promise?, tab_id?}         -> {ok, result, url, tab_id}
 //   POST /open_tab     {url?, wait_ms?}                          -> {ok, tab_id, url}
 //   POST /switch_tab   {tab_id}                                  -> {ok, tab_id, url}
@@ -172,6 +175,19 @@ async function handle(req, res) {
             total_chars: text.length,
             truncated,
         });
+    }
+    if (url === "/get_cookies") {
+        const cookies = await m.getCookies(body.urls);
+        return send(res, 200, { cookies });
+    }
+    if (url === "/set_cookie") {
+        await m.setCookie(body);
+        return send(res, 200, { ok: true });
+    }
+    if (url === "/clear_cookies") {
+        const hasFilter = body.name || body.domain || body.path;
+        const r = await m.clearCookies(hasFilter ? { name: body.name, domain: body.domain, path: body.path } : undefined);
+        return send(res, 200, r);
     }
     if (url === "/open_tab") {
         const r = await m.openTab(body.url, body.wait_ms);

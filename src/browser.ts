@@ -68,6 +68,15 @@ export async function closeBrowser(): Promise<void> {
 }
 
 /**
+ * Returns the active BrowserContext. Cookies, storage, and other context-level
+ * state operations go through this. Lazily initializes the session if needed.
+ */
+export async function getContext(): Promise<BrowserContext> {
+  await getTabs();
+  return session!.context;
+}
+
+/**
  * Wipe the persisted profile (cookies, localStorage, etc.) and restart with
  * a fresh context. The next getTabs() call will see a clean browser.
  */

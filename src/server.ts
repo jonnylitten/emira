@@ -392,6 +392,90 @@ server.tool(
   },
 );
 
+// ─── Cookie tools ────────────────────────────────────────────────────────
+// Cookies are shared across all tabs in the BrowserContext, so these tools
+// don't take a tab_id. They operate on the whole session.
+
+server.tool(
+  "get_cookies",
+  "List cookies for the current session. Pass `urls` (one URL or an array) to filter to cookies the browser would send to those URLs. Omit to get every cookie in the context.",
+  {
+    urls: z
+      .union([z.string().url(), z.array(z.string().url())])
+      .optional()
+      .describe(
+        "Filter to cookies matching these URLs. Omit to return all cookies.",
+      ),
+  },
+  async ({ urls }) => {
+    const cookies = await m.getCookies(urls);
+    const summary = cookies
+      .map(
+        (c) =>
+          `${c.name}=${c.value.slice(0, 40)}${c.value.length > 40 ? "…" : ""} (${c.domain}${c.path})`,
+      )
+      .join("\n");
+    return {
+      content: [
+        {
+          type: "text",
+          text:
+            cookies.length === 0
+              ? "(no cookies)"
+              : `${cookies.length} cookie${cookies.length === 1 ? "" : "s"}:\n${summary}`,
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  "set_cookie",
+  "Set a cookie on the current browser context. Provide either `url` OR (`domain` AND optionally `path`). `expires` is a Unix timestamp in seconds; omit for a session cookie.",
+  {
+    name: z.string().min(1),
+    value: z.string(),
+    url: z.string().url().optional(),
+    domain: z.string().optional(),
+    path: z.string().optional(),
+    expires: z.number().optional(),
+    httpOnly: z.boolean().optional(),
+    secure: z.boolean().optional(),
+    sameSite: z.enum(["Strict", "Lax", "None"]).optional(),
+  },
+  async (cookie) => {
+    await m.setCookie(cookie);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Set cookie ${cookie.name} on ${cookie.url ?? cookie.domain}.`,
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  "clear_cookies",
+  "Clear cookies from the current browser context. Without filters, clears EVERYTHING. With filters (`name`, `domain`, `path`), narrows the scope. Use this for logout-like behavior without wiping the whole profile (which is what clear_profile does).",
+  {
+    name: z.string().optional(),
+    domain: z.string().optional(),
+    path: z.string().optional(),
+  },
+  async (filter) => {
+    const hasFilter = filter.name || filter.domain || filter.path;
+    await m.clearCookies(hasFilter ? filter : undefined);
+    const scope = hasFilter
+      ? `matching ${JSON.stringify(filter)}`
+      : "(all cookies)";
+    return {
+      content: [{ type: "text", text: `Cleared cookies ${scope}.` }],
+    };
+  },
+);
+
 // ─── Tab management tools ────────────────────────────────────────────────
 
 server.tool(

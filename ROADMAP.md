@@ -17,7 +17,7 @@ What's shipped, what's next, and what's deliberately out of scope. Living docume
 
 Ranked by impact. Pick one at a time.
 
-**Priority order (set 2026-05-31):** file upload → session persistence → multi-tab → everything else. Numbers below reflect the original sequencing for citation continuity, not priority.
+**Priority order (set 2026-05-31):** file upload → session persistence → multi-tab → everything else. ✓ All near-term items shipped by 2026-06-01.
 
 ### ~~1. Filter OmniParser output by `interactivity`~~ ✓ shipped
 `interactive_only` arg on `screenshot_mark` / `POST /screenshot`. Default `true` for omniparser (drops static text labels), `false` for dom (no-op). OmniParser sidecar passes through the upstream `interactivity` flag; DOM detector always sets it to `true`. `labels` responses now include the `interactive` field.
@@ -49,10 +49,8 @@ Optional `main_content_only` arg. Prefers `<main>` / `<article>` / `[role="main"
 
 After comparing marksman against [adityasasidhar/browsercontrol](https://github.com/adityasasidhar/browsercontrol) — the only other MCP server I've found doing Set-of-Marks specifically — the architecture/detector story is essentially the same (DOM-walk SoM, same selector list, no vision fallback there). BrowserControl's edge is breadth of tool surface: it ships ~40 tools vs marksman's 11. Items below are the ones worth borrowing, ranked by how often they'd unblock a real flow.
 
-#### 7. Cookie tools
-Many automation tasks fail not because the UI is hard but because authentication state isn't persistent (logging in fresh every session, or losing it to a `/reload-plugins`). Cookies are the leverage.
-
-**Plan:** Three tools — `get_cookies(domain?)`, `set_cookie({name, value, domain, path, secure, httpOnly, expires?})`, `clear_cookies(domain?)`. All thin wrappers over Playwright's `context.cookies()` / `context.addCookies()` / `context.clearCookies()`. ~60 LOC.
+#### ~~7. Cookie tools~~ ✓ shipped
+Three tools: `get_cookies(urls?)`, `set_cookie({name, value, url?|domain?, ...})`, `clear_cookies({name?, domain?, path?})`. Context-level (no `tab_id` — cookies are shared across all tabs in the BrowserContext). All thin wrappers over Playwright's `context.cookies()` / `context.addCookies()` / `context.clearCookies()`. Smoke-tested against httpbin: read, set, scoped clear, full clear all behave correctly.
 
 #### ~~8. File upload~~ ✓ shipped
 `upload_at_label(label, path, timeout_ms?)` on MCP / `POST /upload` on HTTP. Two-strategy implementation: first tries `setInputFiles` after resolving the bbox-center element via `elementFromPoint` (handles both direct `<input type="file">` clicks and `<label for=...>` clicks). Falls back to arming a `filechooser` event listener before clicking — handles buttons/links that open a file dialog. `path` accepts single string or array (for multi-file inputs). Verified end-to-end against `the-internet.herokuapp.com/upload`.

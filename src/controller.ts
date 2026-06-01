@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { performance } from "node:perf_hooks";
-import { getTabs, clearProfile, getProfileDir } from "./browser.js";
+import { getTabs, getContext, clearProfile, getProfileDir } from "./browser.js";
+import type { Cookie } from "playwright";
 import { annotateScreenshot } from "./annotate.js";
 import { scoreElements, type ScoredMatch } from "./scoring.js";
 import { bboxIntersects } from "./geometry.js";
@@ -337,6 +338,47 @@ export class Marksman {
 
     const result = await tab.page.evaluate(wrapped);
     return { result, url: tab.page.url(), tab_id: tab.id };
+  }
+
+  // ─── Cookie management ─────────────────────────────────────────────────
+  // Cookies live on the BrowserContext (shared across all tabs), so these
+  // don't take a tab_id — they always operate on the full context.
+
+  async getCookies(urls?: string | string[]): Promise<Cookie[]> {
+    const context = await getContext();
+    return await context.cookies(urls);
+  }
+
+  async setCookie(cookie: {
+    name: string;
+    value: string;
+    url?: string;
+    domain?: string;
+    path?: string;
+    expires?: number;
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: "Strict" | "Lax" | "None";
+  }): Promise<void> {
+    const context = await getContext();
+    // Playwright requires either `url` OR (`domain` AND `path`). Default path
+    // to "/" if domain is given without one.
+    if (!cookie.url && cookie.domain && !cookie.path) {
+      cookie = { ...cookie, path: "/" };
+    }
+    await context.addCookies([cookie]);
+  }
+
+  async clearCookies(filter?: {
+    name?: string;
+    domain?: string;
+    path?: string;
+  }): Promise<{ cleared: boolean }> {
+    const context = await getContext();
+    // Playwright's clearCookies accepts an optional filter; passing nothing
+    // clears everything for the context.
+    await context.clearCookies(filter);
+    return { cleared: true };
   }
 
   async clearProfile(): Promise<{ profileDir: string }> {
