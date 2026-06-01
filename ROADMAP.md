@@ -25,10 +25,14 @@ Ranked by impact. Pick one at a time.
 ### ~~2. Pre-inference region cropping~~ ✓ shipped
 When `region` is set and detector is omniparser, the screenshot is cropped via sharp BEFORE inference. Coords come back in crop space and get translated to page space for the labelMap. DOM path unchanged (it queries the live page, not the screenshot). Saved screenshot dimensions match the region exactly.
 
-### 3. Multi-tab support
-Single-tab is fine for one-off flows but fails for any task that needs to compare two pages, follow a popup, or keep an auth context alive while opening links. Currently a click that opens `_blank` is invisible to us.
+### ~~3. Multi-tab support~~ ✓ shipped
+New `TabRegistry` (src/tabs.ts) owns the set of open tabs. Monotonically-increasing numeric ids, stable for the process lifetime, never recycled. Each tab has its own label state — labels are per-screenshot per-tab, so switching tabs doesn't pollute state.
 
-**Plan:** Replace the singleton `Marksman` controller with a registry keyed by tab id. New tools: `open_tab`, `switch_tab`, `list_tabs`, `close_tab`. `screenshot_mark` and friends default to the active tab; per-call `tab_id` opt-in. Label maps become per-tab.
+Four new tools: `open_tab(url?, wait_ms?)`, `switch_tab(tab_id)`, `list_tabs()`, `close_tab(tab_id?)`. Every existing action tool gains an optional `tab_id` parameter that defaults to the active tab — pass it explicitly to act on a non-active tab without switching. `screenshot_mark` results now include `tab_id` so the agent always knows which tab it just captured.
+
+**Popups auto-register.** target=_blank clicks, window.open, OAuth flows: the BrowserContext fires a 'page' event, which the registry listens for. The new tab shows up in the next `list_tabs` call with no special handling needed by the agent. Verified end-to-end against the-internet.herokuapp.com/windows.
+
+**Close behavior:** closing the active tab promotes the lowest remaining id. Closing the last tab auto-spawns a fresh blank one so the session is always usable.
 
 ### 4. `find_label` re-ranking heuristics
 The fuzzy-text ranker is fine for clear queries ("submit button") but ties on ambiguous ones. The agent flagged that "search" returned both the input *and* the button at the same score. A small bias toward `<input>` types when the description contains verbs implying typing ("search for X", "enter Y") would resolve ties usefully.

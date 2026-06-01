@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { performance } from "node:perf_hooks";
-import { getPage, clearProfile, getProfileDir } from "./browser.js";
+import { getTabs, clearProfile, getProfileDir } from "./browser.js";
 import { annotateScreenshot } from "./annotate.js";
 import { scoreElements, type ScoredMatch } from "./scoring.js";
 import { bboxIntersects } from "./geometry.js";
@@ -9,7 +9,8 @@ import {
   defaultDetector,
   type DetectorName,
 } from "./detector.js";
-import type { BBox, DetectedElement, LabelMap } from "./types.js";
+import type { TabState, TabSummary } from "./tabs.js";
+import type { BBox, DetectedElement } from "./types.js";
 
 export interface ScreenshotOptions {
   url?: string;
@@ -24,6 +25,8 @@ export interface ScreenshotOptions {
    * omniparser, false for dom.
    */
   interactive_only?: boolean;
+  /** Act on a specific tab. Defaults to the active tab. */
+  tab_id?: number;
 }
 
 export interface ScreenshotResult {
@@ -33,21 +36,22 @@ export interface ScreenshotResult {
   detector: DetectorName;
   /** Milliseconds spent in detect(), exposed so callers learn relative cost. */
   detect_ms: number;
+  tab_id: number;
 }
 
 /**
- * Owns the active browser session's label state. Both the MCP server and the
+ * Owns the active browser session's tab registry. Both the MCP server and the
  * HTTP server route through this class so action semantics stay identical
  * across surfaces.
  *
- * Singleton for now — multi-tab support will eventually subdivide this.
+ * State (label maps, last detection results) is per-tab — each TabState owns
+ * its own labelMap and elements list, scoped to that tab's most recent
+ * screenshot. See ./tabs.ts.
  */
 export class Marksman {
-  private labelMap: LabelMap = {};
-  private elements: DetectedElement[] = [];
-
   async screenshot(opts: ScreenshotOptions = {}): Promise<ScreenshotResult> {
-    const page = await getPage();
+    const tab = (await getTabs()).get(opts.tab_id);
+    const { page } = tab;
 
     if (opts.url) {
       await page
@@ -68,10 +72,6 @@ export class Marksman {
     const detectorName = opts.detector ?? defaultDetector();
     const r = opts.region;
 
-    // Crop BEFORE detection when the detector reads from the screenshot
-    // (omniparser). Saves 5–10× on OmniParser inference time when the caller
-    // only wants a corner of the page. DOM detector ignores the screenshot
-    // buffer (it queries the live page), so cropping there is post-detection.
     const cropBeforeDetect = !!r && detectorName === "omniparser";
     const detectionBuf = cropBeforeDetect
       ? await sharp(fullBuf)
@@ -87,8 +87,6 @@ export class Marksman {
     });
     const detect_ms = Math.round(performance.now() - t0);
 
-    // When detection ran on a crop, coords come back relative to the crop —
-    // translate them into page space so labelMap clicks land correctly.
     if (cropBeforeDetect && r) {
       elements = elements.map((el) => ({
         ...el,
@@ -101,25 +99,16 @@ export class Marksman {
       }));
     }
 
-    // DOM detector with region: detection happened on the live page, so coords
-    // are already page-space — just filter to those intersecting the region.
     if (r && detectorName === "dom") {
       elements = elements.filter((el) => bboxIntersects(el.bbox, r));
     }
 
-    // Interactive-only filter. Default is detector-dependent: OmniParser
-    // returns lots of static text labels (place names, road labels) that
-    // aren't clickable; default true cleans that up. DOM detector only ever
-    // returns interactive elements so the flag is a no-op there.
     const interactiveOnly =
       opts.interactive_only ?? detectorName === "omniparser";
     if (interactiveOnly) {
       elements = elements.filter((el) => el.interactive);
     }
 
-    // Build the annotated image. If the region cropped the output, shift
-    // bboxes to crop-relative coords for the visual labels; click coords stay
-    // in page space via labelMap.
     const outputBuf = r ? await ensureCropped(fullBuf, r) : fullBuf;
     let annotationElements = elements;
     if (r) {
@@ -134,16 +123,18 @@ export class Marksman {
       }));
     }
 
-    // Renumber sequentially after all filters.
     elements = elements.map((el, i) => ({ ...el, label: i + 1 }));
     annotationElements = annotationElements.map((el, i) => ({
       ...el,
       label: i + 1,
     }));
 
-    this.labelMap = {};
-    this.elements = elements;
-    for (const el of elements) this.labelMap[el.label] = el.bbox;
+    // Per-tab label state — each tab's most recent screenshot has its own
+    // labels, so switching tabs and acting doesn't accidentally hit a label
+    // from the other tab.
+    tab.labelMap = {};
+    tab.elements = elements;
+    for (const el of elements) tab.labelMap[el.label] = el.bbox;
 
     const marked = await annotateScreenshot(outputBuf, annotationElements);
     return {
@@ -152,68 +143,80 @@ export class Marksman {
       url: page.url(),
       detector: detectorName,
       detect_ms,
+      tab_id: tab.id,
     };
   }
 
-  async click(label: number): Promise<{ x: number; y: number; url: string }> {
-    const bbox = this.requireLabel(label);
-    const page = await getPage();
+  async click(
+    label: number,
+    tab_id?: number,
+  ): Promise<{ x: number; y: number; url: string; tab_id: number }> {
+    const tab = (await getTabs()).get(tab_id);
+    const bbox = this.requireLabel(tab, label);
     const x = bbox.x + bbox.w / 2;
     const y = bbox.y + bbox.h / 2;
-    await page.mouse.click(x, y);
-    return { x, y, url: page.url() };
+    await tab.page.mouse.click(x, y);
+    return { x, y, url: tab.page.url(), tab_id: tab.id };
   }
 
   async type(
     label: number,
     text: string,
     clear?: boolean,
-  ): Promise<{ url: string }> {
-    const bbox = this.requireLabel(label);
-    const page = await getPage();
-    await page.mouse.click(bbox.x + bbox.w / 2, bbox.y + bbox.h / 2);
+    tab_id?: number,
+  ): Promise<{ url: string; tab_id: number }> {
+    const tab = (await getTabs()).get(tab_id);
+    const bbox = this.requireLabel(tab, label);
+    await tab.page.mouse.click(bbox.x + bbox.w / 2, bbox.y + bbox.h / 2);
     if (clear) {
-      await page.keyboard.press("Meta+A");
-      await page.keyboard.press("Delete");
+      await tab.page.keyboard.press("Meta+A");
+      await tab.page.keyboard.press("Delete");
     }
-    await page.keyboard.type(text, { delay: 30 });
-    return { url: page.url() };
+    await tab.page.keyboard.type(text, { delay: 30 });
+    return { url: tab.page.url(), tab_id: tab.id };
   }
 
   async scroll(
     direction: "up" | "down",
     amount = 500,
-  ): Promise<{ url: string }> {
-    const page = await getPage();
-    await page.mouse.wheel(0, direction === "down" ? amount : -amount);
-    return { url: page.url() };
+    tab_id?: number,
+  ): Promise<{ url: string; tab_id: number }> {
+    const tab = (await getTabs()).get(tab_id);
+    await tab.page.mouse.wheel(0, direction === "down" ? amount : -amount);
+    return { url: tab.page.url(), tab_id: tab.id };
   }
 
-  findLabel(description: string, limit = 3): ScoredMatch[] {
-    return scoreElements(this.elements, description).slice(0, limit);
+  async findLabel(
+    description: string,
+    limit = 3,
+    tab_id?: number,
+  ): Promise<ScoredMatch[]> {
+    const tab = (await getTabs()).get(tab_id);
+    return scoreElements(tab.elements, description).slice(0, limit);
   }
 
-  async pressKey(key: string): Promise<{ url: string }> {
-    const page = await getPage();
-    await page.keyboard.press(key);
-    return { url: page.url() };
+  async pressKey(
+    key: string,
+    tab_id?: number,
+  ): Promise<{ url: string; tab_id: number }> {
+    const tab = (await getTabs()).get(tab_id);
+    await tab.page.keyboard.press(key);
+    return { url: tab.page.url(), tab_id: tab.id };
   }
 
   async uploadAtLabel(
     label: number,
     files: string | string[],
     timeout_ms = 5000,
-  ): Promise<{ url: string; count: number }> {
-    const bbox = this.requireLabel(label);
-    const page = await getPage();
+    tab_id?: number,
+  ): Promise<{ url: string; count: number; tab_id: number }> {
+    const tab = (await getTabs()).get(tab_id);
+    const bbox = this.requireLabel(tab, label);
+    const { page } = tab;
     const fileList = Array.isArray(files) ? files : [files];
     const cx = bbox.x + bbox.w / 2;
     const cy = bbox.y + bbox.h / 2;
 
-    // First try: resolve the element at the bbox center. If it's an
-    // <input type="file"> (directly, or via a <label for=...> we landed on),
-    // call setInputFiles on it — that's the most reliable path, doesn't
-    // depend on the click actually opening a system file picker.
     const inputHandle = await page.evaluateHandle(
       ([x, y]) => {
         let el = document.elementFromPoint(x, y) as HTMLElement | null;
@@ -245,14 +248,11 @@ export class Marksman {
       if (element) {
         await element.setInputFiles(fileList as string[]);
         await inputHandle.dispose();
-        return { url: page.url(), count: fileList.length };
+        return { url: page.url(), count: fileList.length, tab_id: tab.id };
       }
     }
     await inputHandle.dispose();
 
-    // Fallback: click a button/link that opens a file dialog. Arm the
-    // filechooser listener BEFORE the click — the event fires synchronously
-    // with the click and can be missed otherwise.
     const fileChooserPromise = page.waitForEvent("filechooser", {
       timeout: timeout_ms,
     });
@@ -267,81 +267,82 @@ export class Marksman {
       );
     }
     await chooser.setFiles(fileList);
-    return { url: page.url(), count: fileList.length };
+    return { url: page.url(), count: fileList.length, tab_id: tab.id };
   }
 
   async hoverLabel(
     label: number,
-  ): Promise<{ x: number; y: number; url: string }> {
-    const bbox = this.requireLabel(label);
-    const page = await getPage();
+    tab_id?: number,
+  ): Promise<{ x: number; y: number; url: string; tab_id: number }> {
+    const tab = (await getTabs()).get(tab_id);
+    const bbox = this.requireLabel(tab, label);
     const x = bbox.x + bbox.w / 2;
     const y = bbox.y + bbox.h / 2;
-    await page.mouse.move(x, y);
-    return { x, y, url: page.url() };
+    await tab.page.mouse.move(x, y);
+    return { x, y, url: tab.page.url(), tab_id: tab.id };
   }
 
-  async goBack(): Promise<{ ok: boolean; url: string }> {
-    const page = await getPage();
+  async goBack(
+    tab_id?: number,
+  ): Promise<{ ok: boolean; url: string; tab_id: number }> {
+    const tab = (await getTabs()).get(tab_id);
     try {
-      const resp = await page.goBack({ waitUntil: "load" });
-      return { ok: resp !== null, url: page.url() };
+      const resp = await tab.page.goBack({ waitUntil: "load" });
+      return { ok: resp !== null, url: tab.page.url(), tab_id: tab.id };
     } catch {
-      // A click that triggered navigation can leave goBack racing against the
-      // detached previous frame. Settle, then report current state.
-      await page.waitForLoadState("load").catch(() => {});
-      return { ok: false, url: page.url() };
+      await tab.page.waitForLoadState("load").catch(() => {});
+      return { ok: false, url: tab.page.url(), tab_id: tab.id };
     }
   }
 
-  async goForward(): Promise<{ ok: boolean; url: string }> {
-    const page = await getPage();
+  async goForward(
+    tab_id?: number,
+  ): Promise<{ ok: boolean; url: string; tab_id: number }> {
+    const tab = (await getTabs()).get(tab_id);
     try {
-      const resp = await page.goForward({ waitUntil: "load" });
-      return { ok: resp !== null, url: page.url() };
+      const resp = await tab.page.goForward({ waitUntil: "load" });
+      return { ok: resp !== null, url: tab.page.url(), tab_id: tab.id };
     } catch {
-      await page.waitForLoadState("load").catch(() => {});
-      return { ok: false, url: page.url() };
+      await tab.page.waitForLoadState("load").catch(() => {});
+      return { ok: false, url: tab.page.url(), tab_id: tab.id };
     }
   }
 
   async waitForLoad(
     state: "load" | "domcontentloaded" | "networkidle" = "load",
     timeout?: number,
-  ): Promise<{ url: string }> {
-    const page = await getPage();
-    await page.waitForLoadState(state, timeout ? { timeout } : undefined);
-    return { url: page.url() };
+    tab_id?: number,
+  ): Promise<{ url: string; tab_id: number }> {
+    const tab = (await getTabs()).get(tab_id);
+    await tab.page.waitForLoadState(
+      state,
+      timeout ? { timeout } : undefined,
+    );
+    return { url: tab.page.url(), tab_id: tab.id };
   }
 
   async runJavascript(
     code: string,
     awaitPromise: boolean = false,
-  ): Promise<{ result: unknown; url: string }> {
-    const page = await getPage();
-    // Wrap in an IIFE so callers can write multi-statement bodies and use
-    // `return X` to send a value back. The pattern works for both sync and
-    // async code; for async, the wrapper itself is async so the caller can
-    // use `await` in the body.
+    tab_id?: number,
+  ): Promise<{ result: unknown; url: string; tab_id: number }> {
+    const tab = (await getTabs()).get(tab_id);
     const wrapped = awaitPromise
       ? `(async () => { ${code} })()`
       : `(() => { ${code} })()`;
 
-    // Stderr log so a user can audit page-evaluate calls without it polluting
-    // MCP stdio. Truncate aggressively — code can be large.
     console.error(
-      `[marksman] run_javascript${awaitPromise ? " (await)" : ""}: ${code.slice(0, 200)}${code.length > 200 ? "…" : ""}`,
+      `[marksman] run_javascript${awaitPromise ? " (await)" : ""} (tab ${tab.id}): ${code.slice(0, 200)}${code.length > 200 ? "…" : ""}`,
     );
 
-    const result = await page.evaluate(wrapped);
-    return { result, url: page.url() };
+    const result = await tab.page.evaluate(wrapped);
+    return { result, url: tab.page.url(), tab_id: tab.id };
   }
 
   async clearProfile(): Promise<{ profileDir: string }> {
     // Reset the persistent context — wipes cookies, localStorage, IndexedDB,
-    // etc. Also clears the in-memory label map since the browser is restarted.
-    this.labelMap = {};
-    this.elements = [];
+    // etc. The next getTabs() call rebuilds the registry with a fresh,
+    // single-tab context.
     return await clearProfile();
   }
 
@@ -352,17 +353,16 @@ export class Marksman {
   async getPageText(
     label?: number,
     mainOnly: boolean = false,
+    tab_id?: number,
   ): Promise<string> {
+    const tab = (await getTabs()).get(tab_id);
     if (label !== undefined) {
-      const el = this.elements.find((e) => e.label === label);
-      if (!el) throw new Error(`Label ${label} not found.`);
+      const el = tab.elements.find((e) => e.label === label);
+      if (!el) throw new Error(`Label ${label} not found in tab ${tab.id}.`);
       return el.text;
     }
-    const page = await getPage();
     if (mainOnly) {
-      // Prefer semantic main-content roots over <body>. Saves ~300 chars of
-      // Wikipedia-style nav/donate chrome that otherwise eats up max_chars.
-      return await page.evaluate(() => {
+      return await tab.page.evaluate(() => {
         const main =
           document.querySelector("main") ??
           document.querySelector("article") ??
@@ -370,14 +370,45 @@ export class Marksman {
         return ((main ?? document.body) as HTMLElement).innerText;
       });
     }
-    return await page.evaluate(() => document.body.innerText);
+    return await tab.page.evaluate(() => document.body.innerText);
   }
 
-  private requireLabel(label: number): BBox {
-    const bbox = this.labelMap[label];
+  // ─── Tab management ────────────────────────────────────────────────────
+
+  async openTab(
+    url?: string,
+    wait_ms?: number,
+  ): Promise<{ tab_id: number; url: string }> {
+    const tabs = await getTabs();
+    const tab = await tabs.open(url, wait_ms);
+    return { tab_id: tab.id, url: tab.page.url() };
+  }
+
+  async switchTab(tab_id: number): Promise<{ tab_id: number; url: string }> {
+    const tabs = await getTabs();
+    const tab = tabs.switch(tab_id);
+    return { tab_id: tab.id, url: tab.page.url() };
+  }
+
+  async listTabs(): Promise<TabSummary[]> {
+    const tabs = await getTabs();
+    return await tabs.list();
+  }
+
+  async closeTab(
+    tab_id?: number,
+  ): Promise<{ closed_id: number; active_id: number | null }> {
+    const tabs = await getTabs();
+    return await tabs.close(tab_id);
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+
+  private requireLabel(tab: TabState, label: number): BBox {
+    const bbox = tab.labelMap[label];
     if (!bbox) {
       throw new Error(
-        `Label ${label} not found. Call screenshot first; the label map is reset on each screenshot.`,
+        `Label ${label} not found in tab ${tab.id}. Call screenshot_mark first; the label map is per-tab and resets on each screenshot.`,
       );
     }
     return bbox;

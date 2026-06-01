@@ -2,10 +2,11 @@ import { chromium, type BrowserContext, type Page } from "playwright";
 import { homedir } from "node:os";
 import path from "node:path";
 import { rm, mkdir } from "node:fs/promises";
+import { TabRegistry } from "./tabs.js";
 
 interface Session {
   context: BrowserContext;
-  page: Page;
+  tabs: TabRegistry;
   profileDir: string;
 }
 
@@ -33,30 +34,30 @@ function resolveProfileDir(): string {
   return path.join(homedir(), ".cache", "marksman", "profile");
 }
 
-export async function getPage(): Promise<Page> {
-  if (session && session.context.pages().length === 0) {
-    // Persistent context can survive but lose all its pages if everything is
-    // closed externally — re-open one rather than throwing.
-    session.page = await session.context.newPage();
-  }
+export async function getTabs(): Promise<TabRegistry> {
   if (!session) {
     const headless = process.env.MARKSMAN_HEADLESS !== "false";
     const profileDir = resolveProfileDir();
     await mkdir(profileDir, { recursive: true });
 
-    // launchPersistentContext combines launch() + newContext() and writes
-    // session state into profileDir. Slightly slower to start (~1s vs ~300ms)
-    // because it replays the on-disk state, but unlocks log-in-once flows.
     const context = await chromium.launchPersistentContext(profileDir, {
       headless,
       viewport: { width: 1280, height: 800 },
     });
-    const page =
-      context.pages()[0] ??
-      (await context.newPage());
-    session = { context, page, profileDir };
+    const tabs = new TabRegistry(context);
+    await tabs.ensureAtLeastOne();
+    session = { context, tabs, profileDir };
   }
-  return session.page;
+  return session.tabs;
+}
+
+/**
+ * Back-compat shim: returns the active tab's Page. Use `getTabs()` when you
+ * need tab management; `getPage()` when you just need the active page.
+ */
+export async function getPage(): Promise<Page> {
+  const tabs = await getTabs();
+  return tabs.getActive().page;
 }
 
 export async function closeBrowser(): Promise<void> {
@@ -68,7 +69,7 @@ export async function closeBrowser(): Promise<void> {
 
 /**
  * Wipe the persisted profile (cookies, localStorage, etc.) and restart with
- * a fresh context. The next getPage() call will see a clean browser.
+ * a fresh context. The next getTabs() call will see a clean browser.
  */
 export async function clearProfile(): Promise<{ profileDir: string }> {
   const profileDir = session?.profileDir ?? resolveProfileDir();
