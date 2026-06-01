@@ -111,4 +111,35 @@ describe("suppressNested", () => {
     ];
     expect(suppressNested(items).map((it) => it.tag)).toEqual(["a", "b", "c"]);
   });
+
+  it("protects directly-interactive elements from being dropped as containers", () => {
+    // Regression for the GitHub search combobox bug: a wide <input> 1060px
+    // wide geometrically contains smaller buttons at its edges. Without
+    // protection, suppressNested drops the input as a "container."
+    const items = [
+      { bbox: box(0, 0, 1060, 32), type: "input" }, // the wide search combobox
+      { bbox: box(900, 4, 80, 24), type: "button" }, // a small button at the edge
+      { bbox: box(990, 4, 60, 24), type: "a" }, // a small link at the other edge
+    ];
+    const noProtect = suppressNested(items);
+    expect(noProtect.map((it) => it.type)).toEqual(["button", "a"]); // input wrongly dropped
+
+    const withProtect = suppressNested(items, 0.8, (it) =>
+      ["a", "button", "input"].includes(it.type),
+    );
+    expect(withProtect.map((it) => it.type)).toEqual(["input", "button", "a"]);
+  });
+
+  it("still drops genuine non-interactive wrappers when the protected set excludes them", () => {
+    // <div onclick> wrapping a real <button>. The div made it into the
+    // candidate set via [onclick] but is not in the protected set.
+    const items = [
+      { bbox: box(0, 0, 200, 100), type: "div" }, // wrapper, not in protected set
+      { bbox: box(50, 30, 100, 40), type: "button" }, // real button inside
+    ];
+    const out = suppressNested(items, 0.8, (it) =>
+      ["a", "button", "input"].includes(it.type),
+    );
+    expect(out.map((it) => it.type)).toEqual(["button"]); // div suppressed
+  });
 });

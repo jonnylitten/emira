@@ -1,5 +1,39 @@
 import { suppressNested } from "./geometry.js";
 /**
+ * Element types we treat as definitely-interactive (real form controls / links
+ * / buttons / ARIA-tagged controls). suppressNested() protects these from
+ * being dropped as "containers" when smaller interactive elements happen to
+ * overlap their bbox — fixes the GitHub-search-combobox bug where a wide
+ * `<input role="combobox">` was wrongly suppressed because smaller buttons
+ * sit inside its 1060px bounding rect.
+ *
+ * Non-protected: `<label>` (already filtered by isRedundantLabel before
+ * suppression), and elements that landed in the candidate set via [tabindex],
+ * [onclick], or [contenteditable] alone — those are the genuine wrapper-y
+ * cases the heuristic was added to clean up.
+ */
+const DIRECTLY_INTERACTIVE_TYPES = new Set([
+    // Tag names (from el.tagName.toLowerCase())
+    "a",
+    "button",
+    "input",
+    "select",
+    "textarea",
+    "summary",
+    // ARIA roles (from el.getAttribute('role'))
+    "link",
+    "checkbox",
+    "radio",
+    "menuitem",
+    "tab",
+    "textbox",
+    "combobox",
+    "switch",
+]);
+function isDirectlyInteractive(type) {
+    return DIRECTLY_INTERACTIVE_TYPES.has(type.toLowerCase());
+}
+/**
  * Walks the live DOM inside the page and returns a flat list of visible,
  * interactive elements with their viewport-relative bounding boxes.
  *
@@ -123,7 +157,7 @@ export async function detectInteractiveElements(page) {
         type: el.type,
         text: el.text,
     }));
-    const filtered = suppressNested(withBbox);
+    const filtered = suppressNested(withBbox, 0.8, (it) => isDirectlyInteractive(it.type));
     return filtered.map((el, i) => ({
         label: i + 1,
         bbox: el.bbox,

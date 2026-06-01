@@ -24,8 +24,15 @@ export function containmentRatio(outer, inner) {
  * Suppresses elements whose bbox almost fully contains a smaller sibling —
  * keeps the inner (more specific) box, drops the outer wrapper. Operates in
  * place on bbox-only records so it can be unit tested without a DOM.
+ *
+ * `protect` is an optional predicate: items where it returns true are NEVER
+ * dropped, even if smaller items sit inside their bbox. This is the escape
+ * hatch for the "wide interactive element contains smaller ones" pattern
+ * (e.g. GitHub's full-width search combobox geometrically containing buttons
+ * at its edges). Without protection, suppressNested wrongly classifies that
+ * combobox as a wrapper and the agent never sees it.
  */
-export function suppressNested(items, threshold = 0.8) {
+export function suppressNested(items, threshold = 0.8, protect) {
     const areas = items.map((it) => it.bbox.w * it.bbox.h);
     const keep = items.map(() => true);
     for (let i = 0; i < items.length; i++) {
@@ -35,7 +42,8 @@ export function suppressNested(items, threshold = 0.8) {
             if (i === j || !keep[j])
                 continue;
             if (areas[j] > areas[i] &&
-                containmentRatio(items[j].bbox, items[i].bbox) >= threshold) {
+                containmentRatio(items[j].bbox, items[i].bbox) >= threshold &&
+                !(protect && protect(items[j]))) {
                 keep[j] = false;
             }
         }
