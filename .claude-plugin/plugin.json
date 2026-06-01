@@ -40,7 +40,6 @@
       "args": ["${CLAUDE_PLUGIN_ROOT}/dist/server.js"],
       "env": {
         "NODE_PATH": "${CLAUDE_PLUGIN_DATA}/node_modules",
-        "CLAUDE_PLUGIN_DATA": "${CLAUDE_PLUGIN_DATA}",
         "MARKSMAN_DETECTOR": "${user_config.detector}",
         "MARKSMAN_OMNIPARSER_PATH": "${user_config.omniparser_path}",
         "MARKSMAN_HEADLESS": "${user_config.headless}",

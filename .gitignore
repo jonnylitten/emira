@@ -18,3 +18,9 @@ omniparser/OmniParser/
 
 # Claude Code auto-memory (per-machine user state)
 memory/
+
+# Guard: literal `${...}` paths that appear when env-var substitution fails.
+# This caught us once when plugin.json self-referenced CLAUDE_PLUGIN_DATA;
+# even after fixing that, keep the pattern ignored so any future template
+# accident creates a gitignored dir rather than 70 chromium-cache files.
+${*}/
