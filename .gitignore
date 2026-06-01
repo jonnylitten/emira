@@ -15,3 +15,6 @@ omniparser/OmniParser/
 
 # Local smoke-test output / scratch
 /tmp/marksman/
+
+# Claude Code auto-memory (per-machine user state)
+memory/

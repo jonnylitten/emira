@@ -171,6 +171,25 @@ p.write_text(src)
 PY
 fi
 
+# Patch 4: util/omniparser.py — upscale EasyOCR's detection input 2× via
+# the mag_ratio param. EasyOCR returns coordinates in original-image space
+# already, so no downstream coord remap needed. Fixes small-UI-text garble
+# like "Sign iIn" / "olrvine" on dense rendered pages (e.g. Google Maps).
+OMNI_FILE="$REPO_DIR/util/omniparser.py"
+if [[ -f "$OMNI_FILE" ]] && ! grep -q "marksman: mag_ratio 2×" "$OMNI_FILE"; then
+  python3 - "$OMNI_FILE" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1])
+src = p.read_text()
+src = src.replace(
+    "easyocr_args={'text_threshold': 0.8}",
+    "easyocr_args={'text_threshold': 0.8, 'mag_ratio': 2.0}  # marksman: mag_ratio 2× detection upscale for small UI text",
+)
+p.write_text(src)
+PY
+fi
+
 echo "==> Installing minimal OmniParser inference dependencies"
 # We use our own inference-requirements.txt rather than OmniParser's full
 # requirements.txt because the upstream list pulls in ~600MB of demo / agent
