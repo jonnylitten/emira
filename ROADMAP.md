@@ -39,6 +39,25 @@ Optional `main_content_only` arg. Prefers `<main>` / `<article>` / `[role="main"
 ### ~~6. Detector cost reporting~~ ✓ shipped
 `detect_ms` returned in HTTP response; MCP response text now includes `Detector: omniparser (12400ms)` so the model learns relative cost without instrumentation.
 
+### Parity-with-BrowserControl pack
+
+After comparing marksman against [adityasasidhar/browsercontrol](https://github.com/adityasasidhar/browsercontrol) — the only other MCP server I've found doing Set-of-Marks specifically — the architecture/detector story is essentially the same (DOM-walk SoM, same selector list, no vision fallback there). BrowserControl's edge is breadth of tool surface: it ships ~40 tools vs marksman's 11. Items below are the ones worth borrowing, ranked by how often they'd unblock a real flow.
+
+#### 7. Cookie tools
+Many automation tasks fail not because the UI is hard but because authentication state isn't persistent (logging in fresh every session, or losing it to a `/reload-plugins`). Cookies are the leverage.
+
+**Plan:** Three tools — `get_cookies(domain?)`, `set_cookie({name, value, domain, path, secure, httpOnly, expires?})`, `clear_cookies(domain?)`. All thin wrappers over Playwright's `context.cookies()` / `context.addCookies()` / `context.clearCookies()`. ~60 LOC.
+
+#### 8. File upload
+Common ask ("upload this PDF to the form") that currently has no path through marksman. Playwright handles file inputs via `locator.setInputFiles()`, but the agent needs a way to address the input.
+
+**Plan:** New `upload_to_label(label, path)` tool. Resolves the labeled element's selector via the existing bbox → DOM-element bridge, calls `setInputFiles(path)`. Path is on the marksman host's filesystem (since that's where Playwright runs). ~40 LOC.
+
+#### 9. `run_javascript` escape hatch
+For everything marksman doesn't have a tool for. Read a localStorage key, dismiss a custom dialog, scroll a non-`window` container. Currently the agent has no way to reach into the page beyond the labeled UI.
+
+**Plan:** New `run_javascript(code, await?)` tool — passes through to `page.evaluate()`. Returns the result as JSON (truncated if huge). `await: true` wraps in an async IIFE for Promise-returning code. ~30 LOC. Guardrails worth considering: log every call (it's the kind of tool that becomes a security review item if marksman ever runs against trusted-host content).
+
 ## Longer-term
 
 ### GPU / MPS support for OmniParser
