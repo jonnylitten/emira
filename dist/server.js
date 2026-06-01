@@ -194,6 +194,31 @@ server.tool("wait_for_load", "Wait for the page to reach a load state. Use after
         ],
     };
 });
+server.tool("run_javascript", "Run arbitrary JavaScript in the current page context — an escape hatch for things marksman doesn't have a dedicated tool for (read localStorage, dismiss a custom dialog, scroll an inner container, parse a DOM region). The `code` is a function body: use `return X` to send a value back. For Promise-returning code (fetch, IndexedDB, etc.), set `await_promise: true` and use `await` in the body. Result is JSON-serialized; non-serializable values become undefined. Logs each call to stderr for auditability.", {
+    code: z
+        .string()
+        .min(1)
+        .describe("A JavaScript function body. Use `return X` to send a value back. Examples: `return localStorage.getItem('user_id')`, `return document.querySelector('.error')?.textContent`, `document.querySelector('.modal-close')?.click()` (no return needed for side-effects)."),
+    await_promise: z
+        .boolean()
+        .optional()
+        .describe("Wrap the body in an async function so you can use `await` inside. Use for fetch, IndexedDB, etc. Default: false."),
+}, async ({ code, await_promise }) => {
+    const { result, url } = await m.runJavascript(code, await_promise);
+    const json = result === undefined ? "undefined" : JSON.stringify(result);
+    const limit = 4000;
+    const display = json.length > limit
+        ? json.slice(0, limit) + `\n…[truncated, total ${json.length} chars]`
+        : json;
+    return {
+        content: [
+            {
+                type: "text",
+                text: `Result: ${display}\nURL: ${url}`,
+            },
+        ],
+    };
+});
 server.tool("clear_profile", "Wipe the persistent browser profile (cookies, localStorage, IndexedDB, downloads). The next screenshot will see a fresh browser as if you'd never logged into anything. Use for logout-like operations or to reset between unrelated automation runs. The profile directory itself stays — only its contents are cleared.", {}, async () => {
     const { profileDir } = await m.clearProfile();
     return {

@@ -314,6 +314,29 @@ export class Marksman {
     return { url: page.url() };
   }
 
+  async runJavascript(
+    code: string,
+    awaitPromise: boolean = false,
+  ): Promise<{ result: unknown; url: string }> {
+    const page = await getPage();
+    // Wrap in an IIFE so callers can write multi-statement bodies and use
+    // `return X` to send a value back. The pattern works for both sync and
+    // async code; for async, the wrapper itself is async so the caller can
+    // use `await` in the body.
+    const wrapped = awaitPromise
+      ? `(async () => { ${code} })()`
+      : `(() => { ${code} })()`;
+
+    // Stderr log so a user can audit page-evaluate calls without it polluting
+    // MCP stdio. Truncate aggressively — code can be large.
+    console.error(
+      `[marksman] run_javascript${awaitPromise ? " (await)" : ""}: ${code.slice(0, 200)}${code.length > 200 ? "…" : ""}`,
+    );
+
+    const result = await page.evaluate(wrapped);
+    return { result, url: page.url() };
+  }
+
   async clearProfile(): Promise<{ profileDir: string }> {
     // Reset the persistent context — wipes cookies, localStorage, IndexedDB,
     // etc. Also clears the in-memory label map since the browser is restarted.

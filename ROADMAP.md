@@ -60,10 +60,10 @@ New `clear_profile` MCP tool / `POST /clear_profile` HTTP endpoint — wipes the
 
 **Caveat shipped with it:** file:// URLs don't persist localStorage in chromium's user-data dir (file origins partition differently). https origins work as expected. Persistent contexts take ~1s longer to launch than ephemeral ones.
 
-#### 9. `run_javascript` escape hatch
-For everything marksman doesn't have a tool for. Read a localStorage key, dismiss a custom dialog, scroll a non-`window` container. Currently the agent has no way to reach into the page beyond the labeled UI.
+#### ~~9. `run_javascript` escape hatch~~ ✓ shipped
+`run_javascript(code, await_promise?)` MCP / `POST /run_javascript` HTTP. The code is treated as a function body — use `return X` to send a value back. Wraps in an IIFE (`(() => { code })()`) for sync, `(async () => { code })()` for async. Result JSON-serialized; non-serializable values become undefined. Truncates at 4000 chars in MCP text responses. Each call logged to stderr (`[marksman] run_javascript: …`) for audit visibility — doesn't pollute MCP stdio.
 
-**Plan:** New `run_javascript(code, await?)` tool — passes through to `page.evaluate()`. Returns the result as JSON (truncated if huge). `await: true` wraps in an async IIFE for Promise-returning code. ~30 LOC. Guardrails worth considering: log every call (it's the kind of tool that becomes a security review item if marksman ever runs against trusted-host content).
+Smoke-tested sync (`return document.title`), async (`return await fetch(...).then(r => r.json())`), localStorage round-trip, and error propagation.
 
 ## Longer-term
 
