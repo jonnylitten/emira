@@ -67,5 +67,41 @@ describe("scoreElements", () => {
             expect(out[i - 1].score).toBeGreaterThanOrEqual(out[i].score);
         }
     });
+    it("treats combobox/textbox/etc. as input-equivalent for the type bonus", () => {
+        // Regression for the GitHub-search-modal case: query "search input"
+        // should rank the combobox whose text is "Search" higher than the
+        // input whose text is "Enter your email". Before the fix, the email
+        // input won because "input" appeared in its haystack twice (text
+        // tokens + type bonus), while the combobox didn't get the input-type
+        // bonus at all.
+        const els = [
+            el(1, "input", "Enter your email"),
+            el(2, "combobox", "Search"),
+            el(3, "button", "Search or jump to…"),
+        ];
+        const out = scoreElements(els, "search input");
+        expect(out[0]?.text).toBe("Search");
+        expect(out[0]?.type).toBe("combobox");
+    });
+    it("does not regress 'email input' — actual email input still wins", () => {
+        // Counter-check: when both the text AND type intent match the input
+        // element, it should still win over a combobox with unrelated text.
+        const els = [
+            el(1, "input", "Enter your email"),
+            el(2, "combobox", "Search"),
+        ];
+        const out = scoreElements(els, "email input");
+        expect(out[0]?.text).toBe("Enter your email");
+    });
+    it("button type-name match still works (no input-synonym regression)", () => {
+        // The button-side type bonus uses plain exact match. Make sure adding
+        // input-synonyms didn't break the existing button-matching path.
+        const els = [
+            el(1, "button", "Cancel"),
+            el(2, "button", "Submit order"),
+        ];
+        const out = scoreElements(els, "submit button");
+        expect(out[0]?.text).toBe("Submit order");
+    });
 });
 //# sourceMappingURL=scoring.test.js.map

@@ -17,7 +17,7 @@ What's shipped, what's next, and what's deliberately out of scope. Living docume
 
 Ranked by impact. Pick one at a time.
 
-**Priority order (set 2026-05-31):** file upload → session persistence → multi-tab → everything else. ✓ All near-term items shipped by 2026-06-01.
+**Priority order (set 2026-05-31):** file upload → session persistence → multi-tab → everything else. ✓ ALL ten near-term items shipped by 2026-06-01.
 
 ### ~~1. Filter OmniParser output by `interactivity`~~ ✓ shipped
 `interactive_only` arg on `screenshot_mark` / `POST /screenshot`. Default `true` for omniparser (drops static text labels), `false` for dom (no-op). OmniParser sidecar passes through the upstream `interactivity` flag; DOM detector always sets it to `true`. `labels` responses now include the `interactive` field.
@@ -34,10 +34,17 @@ Four new tools: `open_tab(url?, wait_ms?)`, `switch_tab(tab_id)`, `list_tabs()`,
 
 **Close behavior:** closing the active tab promotes the lowest remaining id. Closing the last tab auto-spawns a fresh blank one so the session is always usable.
 
-### 4. `find_label` re-ranking heuristics
-The fuzzy-text ranker is fine for clear queries ("submit button") but ties on ambiguous ones. The agent flagged that "search" returned both the input *and* the button at the same score. A small bias toward `<input>` types when the description contains verbs implying typing ("search for X", "enter Y") would resolve ties usefully.
+### ~~4. `find_label` re-ranking heuristics~~ ✓ shipped
+Two fixes in `scoring.ts`:
+1. **Stopped double-counting type.** The haystack used to be `${el.text} ${el.type}` concatenated, which meant query word "input" matched type=input both as a text token (+3) AND as the explicit type-bonus (+2) — beating elements whose actual text contained the search term. Now only `el.text` goes into the text-token haystack; type matching is its own clean step.
+2. **Added input-synonym set.** `input`, `textarea`, `textbox`, `combobox`, `searchbox`, `field`, `textfield` all match the input-like intent. So a query for "search input" now correctly ranks a `<input role="combobox">` whose text is "Search" higher than an `<input>` whose text is "Enter your email".
 
-**Plan:** Add intent-detection pass in `scoring.ts` — keywords like "type", "enter", "search for" → boost score for input/textarea types. Keep it small; full NLU is overkill.
+Verified live on github.com's open search modal:
+| Query | Before | After |
+|---|---|---|
+| `find_label "search input"` top result | "Enter your email" (input, score 5) — wrong | "Search" (combobox, score 5) — right |
+
+3 new regression tests in `scoring.test.ts` (32 total now): the GitHub combobox case, "email input" still ranks email correctly (no over-correction), and the button-type bonus still works (no regression in the unrelated path).
 
 ### ~~5. `main_content_only` on `get_page_text`~~ ✓ shipped
 Optional `main_content_only` arg. Prefers `<main>` / `<article>` / `[role="main"]` over `<body>`, falls back to body when no semantic root is found.
