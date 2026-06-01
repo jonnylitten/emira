@@ -50,10 +50,8 @@ Many automation tasks fail not because the UI is hard but because authentication
 
 **Plan:** Three tools — `get_cookies(domain?)`, `set_cookie({name, value, domain, path, secure, httpOnly, expires?})`, `clear_cookies(domain?)`. All thin wrappers over Playwright's `context.cookies()` / `context.addCookies()` / `context.clearCookies()`. ~60 LOC.
 
-#### 8. File upload
-Common ask ("upload this PDF to the form") that currently has no path through marksman. Playwright handles file inputs via `locator.setInputFiles()`, but the agent needs a way to address the input.
-
-**Plan:** New `upload_to_label(label, path)` tool. Resolves the labeled element's selector via the existing bbox → DOM-element bridge, calls `setInputFiles(path)`. Path is on the marksman host's filesystem (since that's where Playwright runs). ~40 LOC.
+#### ~~8. File upload~~ ✓ shipped
+`upload_at_label(label, path, timeout_ms?)` on MCP / `POST /upload` on HTTP. Two-strategy implementation: first tries `setInputFiles` after resolving the bbox-center element via `elementFromPoint` (handles both direct `<input type="file">` clicks and `<label for=...>` clicks). Falls back to arming a `filechooser` event listener before clicking — handles buttons/links that open a file dialog. `path` accepts single string or array (for multi-file inputs). Verified end-to-end against `the-internet.herokuapp.com/upload`.
 
 #### 10. Session / profile persistence
 *(Promoted from Longer-term per the 2026-05-31 priority decision.)*

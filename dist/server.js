@@ -81,6 +81,26 @@ server.tool("type_at_label", "Focus the labeled element by clicking it, then typ
         ],
     };
 });
+server.tool("upload_at_label", "Upload one or more files via a labeled file input or upload button. Works for direct <input type='file'> elements AND for buttons/links that open a file picker on click — the tool arms a Playwright filechooser listener BEFORE clicking so either pattern works. `path` is an absolute path on the marksman host's filesystem. Pass an array for multi-file inputs.", {
+    label: z.number().int().positive(),
+    path: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
+    timeout_ms: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("How long to wait for the file picker after clicking. Default: 5000ms."),
+}, async ({ label, path, timeout_ms }) => {
+    const { url, count } = await m.uploadAtLabel(label, path, timeout_ms);
+    return {
+        content: [
+            {
+                type: "text",
+                text: `Uploaded ${count} file${count === 1 ? "" : "s"} at label ${label}. URL: ${url}`,
+            },
+        ],
+    };
+});
 server.tool("scroll", "Scroll the page up or down by a pixel amount.", {
     direction: z.enum(["up", "down"]),
     amount: z.number().int().positive().optional(),

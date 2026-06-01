@@ -199,6 +199,77 @@ export class Marksman {
     return { url: page.url() };
   }
 
+  async uploadAtLabel(
+    label: number,
+    files: string | string[],
+    timeout_ms = 5000,
+  ): Promise<{ url: string; count: number }> {
+    const bbox = this.requireLabel(label);
+    const page = await getPage();
+    const fileList = Array.isArray(files) ? files : [files];
+    const cx = bbox.x + bbox.w / 2;
+    const cy = bbox.y + bbox.h / 2;
+
+    // First try: resolve the element at the bbox center. If it's an
+    // <input type="file"> (directly, or via a <label for=...> we landed on),
+    // call setInputFiles on it — that's the most reliable path, doesn't
+    // depend on the click actually opening a system file picker.
+    const inputHandle = await page.evaluateHandle(
+      ([x, y]) => {
+        let el = document.elementFromPoint(x, y) as HTMLElement | null;
+        if (
+          el &&
+          el.tagName === "LABEL" &&
+          (el as HTMLLabelElement).htmlFor
+        ) {
+          el =
+            (document.getElementById(
+              (el as HTMLLabelElement).htmlFor,
+            ) as HTMLElement | null) ?? el;
+        }
+        if (
+          el &&
+          el.tagName === "INPUT" &&
+          (el as HTMLInputElement).type === "file"
+        ) {
+          return el;
+        }
+        return null;
+      },
+      [cx, cy] as const,
+    );
+    const isFileInput = await inputHandle.evaluate((el) => el !== null);
+
+    if (isFileInput) {
+      const element = inputHandle.asElement();
+      if (element) {
+        await element.setInputFiles(fileList as string[]);
+        await inputHandle.dispose();
+        return { url: page.url(), count: fileList.length };
+      }
+    }
+    await inputHandle.dispose();
+
+    // Fallback: click a button/link that opens a file dialog. Arm the
+    // filechooser listener BEFORE the click — the event fires synchronously
+    // with the click and can be missed otherwise.
+    const fileChooserPromise = page.waitForEvent("filechooser", {
+      timeout: timeout_ms,
+    });
+    await page.mouse.click(cx, cy);
+    let chooser;
+    try {
+      chooser = await fileChooserPromise;
+    } catch (err) {
+      throw new Error(
+        `Label ${label} is neither a file input nor a control that opens a file picker within ${timeout_ms}ms. ` +
+          `(orig: ${(err as Error).message})`,
+      );
+    }
+    await chooser.setFiles(fileList);
+    return { url: page.url(), count: fileList.length };
+  }
+
   async hoverLabel(
     label: number,
   ): Promise<{ x: number; y: number; url: string }> {

@@ -6,6 +6,7 @@
 //   POST /screenshot   {url?, wait_ms?, fullpage?, region?}      -> {count, image_path, labels[]}
 //   POST /click        {label}                                   -> {ok, x, y}
 //   POST /type         {label, text, clear?}                     -> {ok}
+//   POST /upload       {label, path, timeout_ms?}                -> {ok, count}
 //   POST /scroll       {direction, amount?}                      -> {ok}
 //   POST /find_label   {description, limit?}                     -> {matches[]}
 //   POST /get_text     {label?, max_chars?}                      -> {text}
@@ -97,6 +98,10 @@ async function handle(req, res) {
     if (url === "/type") {
         const r = await m.type(body.label, String(body.text), body.clear);
         return send(res, 200, { ok: true, url: r.url });
+    }
+    if (url === "/upload") {
+        const r = await m.uploadAtLabel(body.label, body.path, body.timeout_ms);
+        return send(res, 200, { ok: true, url: r.url, count: r.count });
     }
     if (url === "/scroll") {
         const r = await m.scroll(body.direction, body.amount);
