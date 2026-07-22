@@ -27,7 +27,7 @@
 //   POST /list_tabs                                              -> {tabs: [{id, url, title, active}]}
 //   POST /close_tab    {tab_id?}                                 -> {ok, closed_id, active_id}
 import http from "node:http";
-import { mkdirSync, writeFileSync, readFileSync, chmodSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, chmodSync, statSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
@@ -36,16 +36,47 @@ import { getMarksman } from "./controller.js";
 import { ESCALATED_ENDPOINTS, escalationEnabled, escalationError, PolicyError } from "./policy.js";
 const PORT = Number(process.env.MARKSMAN_HTTP_PORT ?? 17542);
 const HOST = process.env.MARKSMAN_HTTP_HOST ?? "127.0.0.1";
-const SHOT_DIR = process.env.MARKSMAN_SHOT_DIR ?? "/tmp/marksman";
-mkdirSync(SHOT_DIR, { recursive: true, mode: 0o700 });
-// Screenshots can contain authenticated pages. mkdir's mode only applies at
-// creation, so tighten pre-existing directories (e.g. an older /tmp/marksman) too.
-try {
-    chmodSync(SHOT_DIR, 0o700);
+/**
+ * Create a directory and prove it is private to this user, or refuse.
+ *
+ * Two failures this guards against, both of which look correct in source and do
+ * nothing at runtime:
+ *   1. mkdir's `mode` is ignored when the directory already exists, so an
+ *      upgrade keeps whatever permissions it had.
+ *   2. A chmod that fails (someone else owns the path) is easy to swallow, and
+ *      then the process happily writes secrets into a world-readable directory.
+ *
+ * So: chmod, then stat and verify both the mode and the owner actually match.
+ * If the directory cannot be secured we throw rather than continue, because the
+ * alternative is writing screenshots of authenticated pages somewhere another
+ * user can read them.
+ */
+function ensureSecureDir(dir, label) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    try {
+        chmodSync(dir, 0o700);
+    }
+    catch (err) {
+        throw new Error(`refusing to use ${label} at ${dir}: could not restrict it to your user ` +
+            `(${err.message}). This usually means another user owns that ` +
+            `path. Set a different directory and restart.`);
+    }
+    const st = statSync(dir);
+    if ((st.mode & 0o777) !== 0o700) {
+        throw new Error(`refusing to use ${label} at ${dir}: permissions are ` +
+            `${(st.mode & 0o777).toString(8)} after chmod, expected 700.`);
+    }
+    if (typeof process.getuid === "function" && st.uid !== process.getuid()) {
+        throw new Error(`refusing to use ${label} at ${dir}: owned by uid ${st.uid}, not you ` +
+            `(uid ${process.getuid()}). Set a different directory and restart.`);
+    }
+    return dir;
 }
-catch {
-    // not ours to chmod; leave it alone
-}
+// Per-user by construction on every platform. /tmp is shared on Linux, and
+// os.tmpdir() only helps on macOS (where TMPDIR is already per-user), so
+// neither is safe as a default on the shared machines this protects against.
+// Deterministic too, so other local clients can compute the same path.
+const SHOT_DIR = ensureSecureDir(process.env.MARKSMAN_SHOT_DIR ?? path.join(os.homedir(), ".marksman", "shots"), "screenshot directory");
 // Escalation policy is declared once in ./policy.ts and enforced inside the
 // controller methods, so the MCP path gets it too. The endpoint check here is
 // an early rejection so HTTP callers get a proper 403 instead of a 500.
@@ -69,16 +100,13 @@ function resolveToken() {
     return { token: randomUUID(), generated: true };
 }
 const { token: TOKEN, generated: TOKEN_GENERATED } = resolveToken();
-try {
-    // mode on mkdir/writeFile only applies at creation, so chmod both explicitly
-    // on every launch. A directory that already existed keeps its old permissions.
-    mkdirSync(path.dirname(TOKEN_FILE), { recursive: true, mode: 0o700 });
-    chmodSync(path.dirname(TOKEN_FILE), 0o700);
-    writeFileSync(TOKEN_FILE, TOKEN, { mode: 0o600 });
-    chmodSync(TOKEN_FILE, 0o600);
-}
-catch (e) {
-    console.error("[marksman] could not persist token file:", e);
+// Same treatment as the screenshot directory: prove it is private, or refuse.
+// A bearer token in a directory another user can read is not a bearer token.
+ensureSecureDir(path.dirname(TOKEN_FILE), "token directory");
+writeFileSync(TOKEN_FILE, TOKEN, { mode: 0o600 });
+chmodSync(TOKEN_FILE, 0o600);
+if ((statSync(TOKEN_FILE).mode & 0o777) !== 0o600) {
+    throw new Error(`refusing to start: ${TOKEN_FILE} is not mode 600 after chmod.`);
 }
 const m = getMarksman();
 let shotCounter = 0;

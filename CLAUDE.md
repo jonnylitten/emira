@@ -97,4 +97,4 @@ Marksman also runs as an HTTP server on `:17542`:
 node /Users/jkl/code/marksman/dist/http-server.js
 ```
 
-Pigeon's `applicator/filler.ts` talks to this surface. Screenshots are saved to `/tmp/marksman/` as PNGs. Read them by path rather than shuttling base64.
+Pigeon's `applicator/filler.ts` talks to this surface. Screenshots are saved to `~/.marksman/shots/` as PNGs. Read them by path rather than shuttling base64.

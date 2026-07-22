@@ -166,7 +166,7 @@ curl -X POST localhost:17542/screenshot \
   -d '{"url":"https://example.com"}'
 # {
 #   "count": 1,
-#   "image_path": "/tmp/marksman/shot-1.png",
+#   "image_path": "~/.marksman/shots/shot-1.png",
 #   "url": "https://example.com/",
 #   "detector": "dom",
 #   "detect_ms": 9,
@@ -361,7 +361,7 @@ What marksman does to limit the blast radius:
 - The default ephemeral profile means an injected instruction has no logged-in sessions to abuse unless you opted into persistence.
 - `run_javascript` logs every call to stderr with the first 200 characters of the code, so a run is auditable after the fact.
 - Labels are a bounded namespace. A model talked into "click label 400" when 32 labels exist gets an error naming the problem, not a click at an arbitrary place.
-- The HTTP surface writes screenshots into `MARKSMAN_SHOT_DIR` (default `/tmp/marksman`), created with mode `0700`.
+- The HTTP surface writes screenshots into `MARKSMAN_SHOT_DIR` (default `~/.marksman/shots`), created with mode `0700`. The directory is verified private at startup: if it cannot be chmodded to `0700`, or it turns out to be owned by another user, marksman refuses to start rather than writing screenshots of authenticated pages somewhere readable. `/tmp` is deliberately not the default, since it is shared on Linux.
 
 ### What is not defended
 
@@ -444,7 +444,7 @@ The stub returns one centered placeholder bbox per request, enough to exercise t
 | `MARKSMAN_HTTP_PORT` | `17542` | HTTP server port. |
 | `MARKSMAN_HTTP_HOST` | `127.0.0.1` | Bind address. Changing this exposes a browser-driving service to the network. |
 | `MARKSMAN_HTTP_TOKEN` | reuse `~/.marksman/http-token`, else random | Bearer token required on every POST. Whichever token wins is always written back to `~/.marksman/http-token` (mode `0600`). |
-| `MARKSMAN_SHOT_DIR` | `/tmp/marksman` | Where marked PNGs are written (created with mode `0700`). HTTP surface only; MCP returns images inline. |
+| `MARKSMAN_SHOT_DIR` | `~/.marksman/shots` | Where marked PNGs are written (mode `0700`, verified at startup; marksman refuses to start if the directory cannot be secured). HTTP surface only; MCP returns images inline. |
 | `MARKSMAN_SHOT_TIMEOUT_MS` | `15000` | Screenshot capture timeout. A full-page capture that exceeds it falls back to a viewport capture rather than failing the call. |
 
 **Security policy** (applies to MCP and HTTP alike, see [Security and threat model](#security-and-threat-model)):
