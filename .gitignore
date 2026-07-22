@@ -24,3 +24,7 @@ memory/
 # even after fixing that, keep the pattern ignored so any future template
 # accident creates a gitignored dir rather than 70 chromium-cache files.
 ${*}/
+
+# secrets
+.env
+.env.*

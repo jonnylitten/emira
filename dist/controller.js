@@ -4,6 +4,7 @@ import { getTabs, getContext, clearProfile, getProfileDir } from "./browser.js";
 import { annotateScreenshot } from "./annotate.js";
 import { scoreElements } from "./scoring.js";
 import { bboxIntersects } from "./geometry.js";
+import { assertEscalationAllowed, assertNavigable, assertUploadPath, fencePageContent, } from "./policy.js";
 import { detect, defaultDetector, } from "./detector.js";
 /**
  * Owns the active browser session's tab registry. Both the MCP server and the
@@ -19,11 +20,12 @@ export class Marksman {
         const tab = (await getTabs()).get(opts.tab_id);
         const { page } = tab;
         if (opts.url) {
+            const target = assertNavigable(opts.url);
             await page
-                .goto(opts.url, { waitUntil: "networkidle", timeout: 15000 })
+                .goto(target, { waitUntil: "networkidle", timeout: 15000 })
                 .catch(async (err) => {
                 if (/Timeout/i.test(err.message)) {
-                    await page.goto(opts.url, { waitUntil: "domcontentloaded" });
+                    await page.goto(target, { waitUntil: "domcontentloaded" });
                 }
                 else
                     throw err;
@@ -31,10 +33,29 @@ export class Marksman {
         }
         if (opts.wait_ms)
             await page.waitForTimeout(opts.wait_ms);
-        const fullBuf = await page.screenshot({
-            type: "png",
-            fullPage: Boolean(opts.fullpage),
-        });
+        // Heavy pages (large media uploaders, many webfonts) can hang a full-page
+        // capture past the default timeout. Falling back to the viewport beats
+        // failing the whole call, since the label map is what callers act on.
+        const shotTimeout = Number(process.env.MARKSMAN_SHOT_TIMEOUT_MS ?? 15000);
+        let fullBuf;
+        try {
+            fullBuf = await page.screenshot({
+                type: "png",
+                fullPage: Boolean(opts.fullpage),
+                timeout: shotTimeout,
+            });
+        }
+        catch (err) {
+            if (!opts.fullpage)
+                throw err;
+            console.error(`[marksman] full-page capture failed (${err.message}); ` +
+                `falling back to viewport capture`);
+            fullBuf = await page.screenshot({
+                type: "png",
+                fullPage: false,
+                timeout: shotTimeout,
+            });
+        }
         const detectorName = opts.detector ?? defaultDetector();
         const r = opts.region;
         const cropBeforeDetect = !!r && detectorName === "omniparser";
@@ -137,10 +158,12 @@ export class Marksman {
         return { url: tab.page.url(), tab_id: tab.id };
     }
     async uploadAtLabel(label, files, timeout_ms = 5000, tab_id) {
+        assertEscalationAllowed("upload_at_label");
         const tab = (await getTabs()).get(tab_id);
         const bbox = this.requireLabel(tab, label);
         const { page } = tab;
-        const fileList = Array.isArray(files) ? files : [files];
+        // Confine to MARKSMAN_UPLOAD_ROOT before anything touches the page.
+        const fileList = (Array.isArray(files) ? files : [files]).map(assertUploadPath);
         const cx = bbox.x + bbox.w / 2;
         const cy = bbox.y + bbox.h / 2;
         const inputHandle = await page.evaluateHandle(([x, y]) => {
@@ -219,6 +242,7 @@ export class Marksman {
         return { url: tab.page.url(), tab_id: tab.id };
     }
     async runJavascript(code, awaitPromise = false, tab_id) {
+        assertEscalationAllowed("run_javascript");
         const tab = (await getTabs()).get(tab_id);
         const wrapped = awaitPromise
             ? `(async () => { ${code} })()`
@@ -231,10 +255,12 @@ export class Marksman {
     // Cookies live on the BrowserContext (shared across all tabs), so these
     // don't take a tab_id — they always operate on the full context.
     async getCookies(urls) {
+        assertEscalationAllowed("get_cookies");
         const context = await getContext();
         return await context.cookies(urls);
     }
     async setCookie(cookie) {
+        assertEscalationAllowed("set_cookie");
         const context = await getContext();
         // Playwright requires either `url` OR (`domain` AND `path`). Default path
         // to "/" if domain is given without one.
@@ -244,6 +270,7 @@ export class Marksman {
         await context.addCookies([cookie]);
     }
     async clearCookies(filter) {
+        assertEscalationAllowed("clear_cookies");
         const context = await getContext();
         // Playwright's clearCookies accepts an optional filter; passing nothing
         // clears everything for the context.
@@ -265,22 +292,47 @@ export class Marksman {
             const el = tab.elements.find((e) => e.label === label);
             if (!el)
                 throw new Error(`Label ${label} not found in tab ${tab.id}.`);
-            return el.text;
+            // For form controls the caller almost always wants the live value, not
+            // the detected label/placeholder text. Resolve the element the same way a
+            // click does (bbox centre) and read .value / .checked when applicable.
+            const live = await tab.page.evaluate(({ x, y }) => {
+                const node = document.elementFromPoint(x, y);
+                if (!node)
+                    return null;
+                if (node instanceof HTMLInputElement) {
+                    return node.type === "checkbox" || node.type === "radio"
+                        ? String(node.checked)
+                        : node.value;
+                }
+                if (node instanceof HTMLTextAreaElement)
+                    return node.value;
+                if (node instanceof HTMLSelectElement)
+                    return node.value;
+                return null;
+            }, { x: el.bbox.x + el.bbox.w / 2, y: el.bbox.y + el.bbox.h / 2 });
+            return live ?? el.text;
         }
+        // Bulk page text is the main injection vector, so mark it as data rather
+        // than instructions. Single-label reads above are returned unfenced: they
+        // are a targeted read of one element the caller already chose, and wrapping
+        // a form value in a block would obscure it. Stated in the threat model.
+        const src = tab.page.url();
         if (mainOnly) {
-            return await tab.page.evaluate(() => {
+            const text = await tab.page.evaluate(() => {
                 const main = document.querySelector("main") ??
                     document.querySelector("article") ??
                     document.querySelector('[role="main"]');
                 return (main ?? document.body).innerText;
             });
+            return fencePageContent(text, src);
         }
-        return await tab.page.evaluate(() => document.body.innerText);
+        const body = await tab.page.evaluate(() => document.body.innerText);
+        return fencePageContent(body, src);
     }
     // ─── Tab management ────────────────────────────────────────────────────
     async openTab(url, wait_ms) {
         const tabs = await getTabs();
-        const tab = await tabs.open(url, wait_ms);
+        const tab = await tabs.open(url ? assertNavigable(url) : url, wait_ms);
         return { tab_id: tab.id, url: tab.page.url() };
     }
     async switchTab(tab_id) {

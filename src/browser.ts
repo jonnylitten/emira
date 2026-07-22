@@ -1,13 +1,15 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import { rm, mkdir } from "node:fs/promises";
+import { rm, mkdir, mkdtemp, readdir, stat, chmod } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { TabRegistry } from "./tabs.js";
 
 interface Session {
   context: BrowserContext;
   tabs: TabRegistry;
   profileDir: string;
+  ephemeral: boolean;
 }
 
 let session: Session | null = null;
@@ -34,21 +36,59 @@ function resolveProfileDir(): string {
   return path.join(homedir(), ".cache", "marksman", "profile");
 }
 
+/** Parse MARKSMAN_VIEWPORT ("1440x900"). Falls back to a roomy default. */
+function resolveViewport(): { width: number; height: number } {
+  const m = process.env.MARKSMAN_VIEWPORT?.trim().match(
+    /^(\d{3,5})\s*[x×]\s*(\d{3,5})$/i,
+  );
+  if (m) return { width: Number(m[1]), height: Number(m[2]) };
+  return { width: 1440, height: 900 };
+}
+
+/**
+ * Whether to reuse the on-disk profile. Off by default.
+ *
+ * A persistent profile holds live logged-in sessions, which turns any other
+ * weakness into account access. So persistence is opt-in: set
+ * MARKSMAN_PERSIST_PROFILE=1 when you genuinely need to stay logged in across
+ * runs (and tighten everything else when you do). Otherwise each session gets a
+ * throwaway profile that is deleted on shutdown.
+ */
+function persistProfile(): boolean {
+  return /^(1|true)$/i.test(process.env.MARKSMAN_PERSIST_PROFILE ?? "");
+}
+
 export async function getTabs(): Promise<TabRegistry> {
   if (!session) {
     const headless = process.env.MARKSMAN_HEADLESS !== "false";
     const executablePath = process.env.MARKSMAN_EXECUTABLE_PATH?.trim() || undefined;
-    const profileDir = resolveProfileDir();
-    await mkdir(profileDir, { recursive: true });
+    const ephemeral = !persistProfile();
+    if (ephemeral) await sweepStaleProfiles();
+    const profileDir = ephemeral
+      ? await mkdtemp(path.join(tmpdir(), "marksman-profile-"))
+      : resolveProfileDir();
+    if (!ephemeral) {
+      await mkdir(profileDir, { recursive: true, mode: 0o700 });
+      // mkdir's mode only applies at creation, so profiles made before this was
+      // tightened would keep their old permissions. This dir holds live logged-in
+      // sessions, so enforce owner-only every launch.
+      await chmod(profileDir, 0o700).catch(() => {});
+    }
 
     const context = await chromium.launchPersistentContext(profileDir, {
       headless,
-      viewport: { width: 1280, height: 800 },
+      viewport: resolveViewport(),
+      // Playwright's default signal handling tears the process down on
+      // SIGTERM/SIGINT before our own shutdown can finish, which skipped
+      // temp-profile cleanup entirely. Own the lifecycle ourselves.
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false,
       ...(executablePath ? { executablePath } : {}),
     });
     const tabs = new TabRegistry(context);
     await tabs.ensureAtLeastOne();
-    session = { context, tabs, profileDir };
+    session = { context, tabs, profileDir, ephemeral };
   }
   return session.tabs;
 }
@@ -64,8 +104,58 @@ export async function getPage(): Promise<Page> {
 
 export async function closeBrowser(): Promise<void> {
   if (session) {
+    const { profileDir, ephemeral } = session;
     await session.context.close().catch(() => {});
     session = null;
+    // Throwaway profiles carry whatever the run touched. Don't leave them behind.
+    if (ephemeral) await removeProfile(profileDir);
+  }
+}
+
+/**
+ * Remove a throwaway profile. Chromium helper processes can still be writing
+ * for a moment after context.close() resolves, so a single rm can lose the
+ * race; retry briefly, and say so on stderr rather than failing silently.
+ */
+async function removeProfile(dir: string): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await rm(dir, { recursive: true, force: true, maxRetries: 3 });
+      if (!existsSync(dir)) return;
+    } catch {
+      // fall through to retry
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (existsSync(dir)) {
+    console.error(`[marksman] could not remove temp profile ${dir}`);
+  }
+}
+
+/**
+ * Delete abandoned throwaway profiles from previous runs.
+ *
+ * Exit handlers are not guaranteed (SIGKILL, crashes, a killed terminal), so
+ * cleanup cannot depend on shutdown alone. Anything older than an hour is not
+ * an active session, so it is safe to remove.
+ */
+async function sweepStaleProfiles(): Promise<void> {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  try {
+    const entries = await readdir(tmpdir(), { withFileTypes: true });
+    for (const e of entries) {
+      if (!e.isDirectory() || !e.name.startsWith("marksman-profile-")) continue;
+      const full = path.join(tmpdir(), e.name);
+      try {
+        if ((await stat(full)).mtimeMs < cutoff) {
+          await rm(full, { recursive: true, force: true });
+        }
+      } catch {
+        // another process may own it; skip
+      }
+    }
+  } catch {
+    // sweeping is best-effort
   }
 }
 

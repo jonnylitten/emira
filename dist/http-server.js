@@ -27,13 +27,59 @@
 //   POST /list_tabs                                              -> {tabs: [{id, url, title, active}]}
 //   POST /close_tab    {tab_id?}                                 -> {ok, closed_id, active_id}
 import http from "node:http";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, chmodSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
+import { randomUUID } from "node:crypto";
 import { closeBrowser } from "./browser.js";
 import { getMarksman } from "./controller.js";
+import { ESCALATED_ENDPOINTS, escalationEnabled, escalationError, PolicyError } from "./policy.js";
 const PORT = Number(process.env.MARKSMAN_HTTP_PORT ?? 17542);
+const HOST = process.env.MARKSMAN_HTTP_HOST ?? "127.0.0.1";
 const SHOT_DIR = process.env.MARKSMAN_SHOT_DIR ?? "/tmp/marksman";
-mkdirSync(SHOT_DIR, { recursive: true });
+mkdirSync(SHOT_DIR, { recursive: true, mode: 0o700 });
+// Screenshots can contain authenticated pages. mkdir's mode only applies at
+// creation, so tighten pre-existing directories (e.g. an older /tmp/marksman) too.
+try {
+    chmodSync(SHOT_DIR, 0o700);
+}
+catch {
+    // not ours to chmod; leave it alone
+}
+// Escalation policy is declared once in ./policy.ts and enforced inside the
+// controller methods, so the MCP path gets it too. The endpoint check here is
+// an early rejection so HTTP callers get a proper 403 instead of a 500.
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+// Shared bearer token. Precedence: explicit env var, then a previously written
+// token file, else a fresh random token. The active token is always written to
+// the file (0600) so local clients discover it without env coordination.
+const TOKEN_FILE = path.join(os.homedir(), ".marksman", "http-token");
+function resolveToken() {
+    if (process.env.MARKSMAN_HTTP_TOKEN) {
+        return { token: process.env.MARKSMAN_HTTP_TOKEN, generated: false };
+    }
+    try {
+        const existing = readFileSync(TOKEN_FILE, "utf8").trim();
+        if (existing)
+            return { token: existing, generated: false };
+    }
+    catch {
+        // no token file yet
+    }
+    return { token: randomUUID(), generated: true };
+}
+const { token: TOKEN, generated: TOKEN_GENERATED } = resolveToken();
+try {
+    // mode on mkdir/writeFile only applies at creation, so chmod both explicitly
+    // on every launch. A directory that already existed keeps its old permissions.
+    mkdirSync(path.dirname(TOKEN_FILE), { recursive: true, mode: 0o700 });
+    chmodSync(path.dirname(TOKEN_FILE), 0o700);
+    writeFileSync(TOKEN_FILE, TOKEN, { mode: 0o600 });
+    chmodSync(TOKEN_FILE, 0o600);
+}
+catch (e) {
+    console.error("[marksman] could not persist token file:", e);
+}
 const m = getMarksman();
 let shotCounter = 0;
 function readJson(req) {
@@ -65,6 +111,28 @@ async function handle(req, res) {
     }
     if (req.method !== "POST") {
         return send(res, 405, { error: "method not allowed" });
+    }
+    // --- Security preamble ---------------------------------------------------
+    // Loopback service holding live browser sessions. Reject anything that looks
+    // like it came from a web page (a page you visit must not be able to drive
+    // this), enforce a bearer token, and gate the escalated endpoints.
+    if (req.headers.origin) {
+        return send(res, 403, { error: "cross-origin requests are not allowed" });
+    }
+    const hostHeader = (req.headers.host ?? "").split(":")[0];
+    if (!LOCAL_HOSTS.has(hostHeader)) {
+        return send(res, 403, { error: "requests must target localhost" });
+    }
+    const contentType = (req.headers["content-type"] ?? "").split(";")[0].trim();
+    if (contentType !== "application/json") {
+        return send(res, 415, { error: "content-type must be application/json" });
+    }
+    if (req.headers.authorization !== `Bearer ${TOKEN}`) {
+        return send(res, 401, { error: "unauthorized" });
+    }
+    const pathname = url.split("?")[0];
+    if (ESCALATED_ENDPOINTS.has(pathname) && !escalationEnabled()) {
+        return send(res, 403, { error: escalationError(pathname.slice(1)) });
     }
     const body = await readJson(req).catch(() => null);
     if (body === null)
@@ -209,17 +277,41 @@ async function handle(req, res) {
 }
 const server = http.createServer((req, res) => {
     handle(req, res).catch((err) => {
+        // Policy refusals are client errors, not server faults.
+        if (err instanceof PolicyError) {
+            return send(res, 400, { error: err.message });
+        }
         console.error("handler error:", err);
         send(res, 500, { error: String(err?.message ?? err) });
     });
 });
-server.listen(PORT, () => {
-    console.log(`marksman http listening on :${PORT}, shots -> ${SHOT_DIR}`);
+server.listen(PORT, HOST, () => {
+    console.log(`marksman http listening on ${HOST}:${PORT}, shots -> ${SHOT_DIR}`);
+    if (TOKEN_GENERATED) {
+        console.error(`[marksman] generated auth token (also written to ${TOKEN_FILE}):`);
+        console.error(`[marksman]   ${TOKEN}`);
+        console.error(`[marksman] set MARKSMAN_HTTP_TOKEN to pin a fixed token across restarts.`);
+    }
+    console.error(`[marksman] escalated tools ${escalationEnabled() ? "ENABLED" : "disabled"} ` +
+        `(run_javascript, upload, cookies)`);
 });
-const shutdown = async () => {
-    await closeBrowser();
+let shuttingDown = false;
+const shutdown = async (signal) => {
+    if (shuttingDown)
+        return;
+    shuttingDown = true;
+    console.error(`[marksman] ${signal} received, closing browser…`);
+    try {
+        await closeBrowser();
+    }
+    catch (err) {
+        console.error("[marksman] error during browser close:", err);
+    }
+    console.error("[marksman] shutdown complete");
     server.close(() => process.exit(0));
+    // Don't hang forever on lingering keep-alive connections.
+    setTimeout(() => process.exit(0), 2000).unref();
 };
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
 //# sourceMappingURL=http-server.js.map
