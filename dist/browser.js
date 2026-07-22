@@ -1,9 +1,10 @@
 import { chromium } from "playwright";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import { rm, mkdir, mkdtemp, readdir, stat, chmod } from "node:fs/promises";
+import { rm, mkdtemp, readdir, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { TabRegistry } from "./tabs.js";
+import { ensureSecureDir } from "./policy.js";
 let session = null;
 /**
  * Resolve the Chromium user-data directory.
@@ -56,11 +57,20 @@ export async function getTabs() {
             ? await mkdtemp(path.join(tmpdir(), "marksman-profile-"))
             : resolveProfileDir();
         if (!ephemeral) {
-            await mkdir(profileDir, { recursive: true, mode: 0o700 });
-            // mkdir's mode only applies at creation, so profiles made before this was
-            // tightened would keep their old permissions. This dir holds live logged-in
-            // sessions, so enforce owner-only every launch.
-            await chmod(profileDir, 0o700).catch(() => { });
+            // This directory holds live logged-in sessions, so it gets the strictest
+            // treatment of the three: created, chmodded, then verified by stat for
+            // both mode and owner, refusing to launch if it cannot be secured. An
+            // ignored chmod failure here would mean session cookies sitting in a
+            // directory another user can read.
+            //
+            // When the default location is in use we own the parent too, so harden it
+            // as well. An explicitly configured MARKSMAN_PROFILE_DIR is left alone
+            // above its own directory, since that path belongs to the user.
+            const defaultParent = path.join(homedir(), ".cache", "marksman");
+            if (profileDir.startsWith(defaultParent + path.sep)) {
+                ensureSecureDir(defaultParent, "profile parent directory");
+            }
+            ensureSecureDir(profileDir, "browser profile directory");
         }
         const context = await chromium.launchPersistentContext(profileDir, {
             headless,

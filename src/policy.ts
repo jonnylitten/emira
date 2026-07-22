@@ -4,7 +4,7 @@
 // so the MCP path and the HTTP path are covered by the same declaration and a
 // newly added tool cannot silently skip the check.
 import path from "node:path";
-import { realpathSync } from "node:fs";
+import { realpathSync, mkdirSync, chmodSync, statSync } from "node:fs";
 
 /** A request refused by policy, not a bug. Surfaces as 400, not 500. */
 export class PolicyError extends Error {
@@ -135,4 +135,45 @@ export function assertUploadPath(requested: string): string {
  */
 export function fencePageContent(text: string, src: string): string {
   return `<untrusted-page-content src="${src}">\n${text}\n</untrusted-page-content>`;
+}
+
+/**
+ * Create a directory and prove it is private to this user, or refuse.
+ *
+ * Two failures this guards against, both of which look correct in source and do
+ * nothing at runtime:
+ *   1. mkdir's `mode` is ignored when the directory already exists, so an
+ *      upgrade keeps whatever permissions it had.
+ *   2. A chmod that fails (someone else owns the path) is easy to swallow, and
+ *      then the process happily writes secrets into a readable directory.
+ *
+ * So: chmod, then stat and verify both the mode and the owner actually match.
+ * Throws rather than continuing, because the alternative is writing session
+ * cookies or screenshots of authenticated pages somewhere another user can read.
+ */
+export function ensureSecureDir(dir: string, label: string): string {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    chmodSync(dir, 0o700);
+  } catch (err) {
+    throw new PolicyError(
+      `refusing to use ${label} at ${dir}: could not restrict it to your user ` +
+        `(${(err as Error).message}). This usually means another user owns that ` +
+        `path. Set a different directory and restart.`,
+    );
+  }
+  const st = statSync(dir);
+  if ((st.mode & 0o777) !== 0o700) {
+    throw new PolicyError(
+      `refusing to use ${label} at ${dir}: permissions are ` +
+        `${(st.mode & 0o777).toString(8)} after chmod, expected 700.`,
+    );
+  }
+  if (typeof process.getuid === "function" && st.uid !== process.getuid()) {
+    throw new PolicyError(
+      `refusing to use ${label} at ${dir}: owned by uid ${st.uid}, not you ` +
+        `(uid ${process.getuid()}). Set a different directory and restart.`,
+    );
+  }
+  return dir;
 }

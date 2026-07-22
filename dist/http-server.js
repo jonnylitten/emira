@@ -27,51 +27,15 @@
 //   POST /list_tabs                                              -> {tabs: [{id, url, title, active}]}
 //   POST /close_tab    {tab_id?}                                 -> {ok, closed_id, active_id}
 import http from "node:http";
-import { mkdirSync, writeFileSync, readFileSync, chmodSync, statSync } from "node:fs";
+import { writeFileSync, readFileSync, chmodSync, statSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { closeBrowser } from "./browser.js";
 import { getMarksman } from "./controller.js";
-import { ESCALATED_ENDPOINTS, escalationEnabled, escalationError, PolicyError } from "./policy.js";
+import { ESCALATED_ENDPOINTS, escalationEnabled, escalationError, ensureSecureDir, PolicyError, } from "./policy.js";
 const PORT = Number(process.env.MARKSMAN_HTTP_PORT ?? 17542);
 const HOST = process.env.MARKSMAN_HTTP_HOST ?? "127.0.0.1";
-/**
- * Create a directory and prove it is private to this user, or refuse.
- *
- * Two failures this guards against, both of which look correct in source and do
- * nothing at runtime:
- *   1. mkdir's `mode` is ignored when the directory already exists, so an
- *      upgrade keeps whatever permissions it had.
- *   2. A chmod that fails (someone else owns the path) is easy to swallow, and
- *      then the process happily writes secrets into a world-readable directory.
- *
- * So: chmod, then stat and verify both the mode and the owner actually match.
- * If the directory cannot be secured we throw rather than continue, because the
- * alternative is writing screenshots of authenticated pages somewhere another
- * user can read them.
- */
-function ensureSecureDir(dir, label) {
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
-    try {
-        chmodSync(dir, 0o700);
-    }
-    catch (err) {
-        throw new Error(`refusing to use ${label} at ${dir}: could not restrict it to your user ` +
-            `(${err.message}). This usually means another user owns that ` +
-            `path. Set a different directory and restart.`);
-    }
-    const st = statSync(dir);
-    if ((st.mode & 0o777) !== 0o700) {
-        throw new Error(`refusing to use ${label} at ${dir}: permissions are ` +
-            `${(st.mode & 0o777).toString(8)} after chmod, expected 700.`);
-    }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) {
-        throw new Error(`refusing to use ${label} at ${dir}: owned by uid ${st.uid}, not you ` +
-            `(uid ${process.getuid()}). Set a different directory and restart.`);
-    }
-    return dir;
-}
 // Per-user by construction on every platform. /tmp is shared on Linux, and
 // os.tmpdir() only helps on macOS (where TMPDIR is already per-user), so
 // neither is safe as a default on the shared machines this protects against.
