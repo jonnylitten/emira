@@ -34,10 +34,34 @@
       "description": "Absolute path to a Chromium/Chrome binary to drive instead of Playwright's bundled Chromium — e.g. /Applications/Chromium.app/Contents/MacOS/Chromium. Useful for hand-solving captchas in a real browser: pair with Headless=off so a window appears that you can click in. Leave blank to use the bundled Chromium.",
       "default": ""
     },
+    "allow_escalated": {
+      "type": "boolean",
+      "title": "Allow escalated tools",
+      "description": "Off by default. Enables run_javascript, upload_at_label, and the cookie tools. These are gated because page content reaches the agent's context, so an injected page could invoke them against a browser holding your live sessions. Turn this on when you are deliberately driving a target you trust (for example App Store Connect), and leave it off for general browsing and scraping.",
+      "default": false
+    },
+    "upload_root": {
+      "type": "directory",
+      "title": "Upload root directory",
+      "description": "Required for file uploads, which are disabled when this is blank. Uploads are confined to this directory so an untrusted page cannot induce an upload of an arbitrary file such as an SSH key. Point it at the folder holding the files you intend to upload (for example your screenshots folder).",
+      "default": ""
+    },
+    "persist_profile": {
+      "type": "boolean",
+      "title": "Persist browser profile",
+      "description": "Off by default: each session gets a throwaway profile that is deleted on shutdown. Turn this on to stay logged in across runs (needed for flows like App Store Connect that require an authenticated session). Understand the tradeoff: a persistent profile means the browser holds real credentials, so anything that can drive marksman can act as you on those sites.",
+      "default": false
+    },
     "profile_dir": {
       "type": "directory",
       "title": "Browser profile directory",
-      "description": "Where cookies, localStorage, and download state persist between sessions. Defaults to ${CLAUDE_PLUGIN_DATA}/profile (survives plugin updates). Set to a custom path if you want to share a profile across machines or back it up. Leave blank for the default."
+      "description": "Only used when 'Persist browser profile' is on. Where cookies, localStorage, and download state are kept between sessions. Defaults to ${CLAUDE_PLUGIN_DATA}/profile (survives plugin updates). Set a custom path to share a profile across machines or back it up. Leave blank for the default."
+    },
+    "viewport": {
+      "type": "string",
+      "title": "Browser viewport",
+      "description": "Viewport size as WIDTHxHEIGHT, e.g. 1440x900 (the default). Increase it for wide app UIs that render cramped at smaller widths.",
+      "default": "1440x900"
     }
   },
   "mcpServers": {
@@ -49,7 +73,11 @@
         "MARKSMAN_DETECTOR": "${user_config.detector}",
         "MARKSMAN_OMNIPARSER_PATH": "${user_config.omniparser_path}",
         "MARKSMAN_HEADLESS": "${user_config.headless}",
+        "MARKSMAN_ALLOW_ESCALATED": "${user_config.allow_escalated}",
+        "MARKSMAN_UPLOAD_ROOT": "${user_config.upload_root}",
+        "MARKSMAN_PERSIST_PROFILE": "${user_config.persist_profile}",
         "MARKSMAN_PROFILE_DIR": "${user_config.profile_dir}",
+        "MARKSMAN_VIEWPORT": "${user_config.viewport}",
         "MARKSMAN_EXECUTABLE_PATH": "${user_config.executable_path}"
       }
     }
