@@ -28,6 +28,12 @@
       "description": "Run Chromium without a window. Turn off to watch what marksman does.",
       "default": true
     },
+    "executable_path": {
+      "type": "string",
+      "title": "Browser executable path",
+      "description": "Absolute path to a Chromium/Chrome binary to drive instead of Playwright's bundled Chromium — e.g. /Applications/Chromium.app/Contents/MacOS/Chromium. Useful for hand-solving captchas in a real browser: pair with Headless=off so a window appears that you can click in. Leave blank to use the bundled Chromium.",
+      "default": ""
+    },
     "profile_dir": {
       "type": "directory",
       "title": "Browser profile directory",
@@ -43,7 +49,8 @@
         "MARKSMAN_DETECTOR": "${user_config.detector}",
         "MARKSMAN_OMNIPARSER_PATH": "${user_config.omniparser_path}",
         "MARKSMAN_HEADLESS": "${user_config.headless}",
-        "MARKSMAN_PROFILE_DIR": "${user_config.profile_dir}"
+        "MARKSMAN_PROFILE_DIR": "${user_config.profile_dir}",
+        "MARKSMAN_EXECUTABLE_PATH": "${user_config.executable_path}"
       }
     }
   }

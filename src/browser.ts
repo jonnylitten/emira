@@ -37,12 +37,14 @@ function resolveProfileDir(): string {
 export async function getTabs(): Promise<TabRegistry> {
   if (!session) {
     const headless = process.env.MARKSMAN_HEADLESS !== "false";
+    const executablePath = process.env.MARKSMAN_EXECUTABLE_PATH?.trim() || undefined;
     const profileDir = resolveProfileDir();
     await mkdir(profileDir, { recursive: true });
 
     const context = await chromium.launchPersistentContext(profileDir, {
       headless,
       viewport: { width: 1280, height: 800 },
+      ...(executablePath ? { executablePath } : {}),
     });
     const tabs = new TabRegistry(context);
     await tabs.ensureAtLeastOne();
