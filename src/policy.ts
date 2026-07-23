@@ -42,11 +42,11 @@ export function escalationEnabled(): boolean {
  */
 export function escalationError(tool: string): string {
   return (
-    `${tool} is disabled. Set MARKSMAN_ALLOW_ESCALATED=1 to enable. ` +
-    `This tool is gated because page content reaches the agent's context, so an ` +
+    `${tool} is disabled. Set MARKSMAN_ALLOW_ESCALATED=1 (or the "Allow escalated tools" ` +
+    `plugin toggle) to enable. Gated because page content reaches the agent's context, so an ` +
     `injected page could invoke it against a browser holding your live sessions. ` +
-    `Enabling it is reasonable when you are deliberately driving a target you trust. ` +
-    `See README "Security and threat model".`
+    `Enable it when you are deliberately driving a target you trust. ` +
+    `See README, Security and threat model.`
   );
 }
 
@@ -100,10 +100,10 @@ export function assertUploadPath(requested: string): string {
   const root = process.env.MARKSMAN_UPLOAD_ROOT?.trim();
   if (!root) {
     throw new PolicyError(
-      `file upload is disabled. Set MARKSMAN_UPLOAD_ROOT to a directory to enable it ` +
-        `(for example the folder holding the files you intend to upload). Uploads are ` +
-        `confined to that directory because an untrusted page could otherwise induce ` +
-        `an upload of any file on this machine. See README "Security and threat model".`,
+      `upload_at_label is disabled. Set MARKSMAN_UPLOAD_ROOT (or the "Upload root directory" ` +
+        `plugin toggle) to the folder holding the files you intend to upload; uploads are ` +
+        `confined to it. Gated because an untrusted page could otherwise induce an upload of ` +
+        `any file on this machine. See README, Security and threat model.`,
     );
   }
   let realRoot: string;
