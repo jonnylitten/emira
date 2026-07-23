@@ -208,7 +208,7 @@ server.tool("wait_for_load", "Wait for the page to reach a load state. Use after
         ],
     };
 });
-server.tool("run_javascript", "Run arbitrary JavaScript in the current page context — an escape hatch for things marksman doesn't have a dedicated tool for (read localStorage, dismiss a custom dialog, scroll an inner container, parse a DOM region). The `code` is a function body: use `return X` to send a value back. For Promise-returning code (fetch, IndexedDB, etc.), set `await_promise: true` and use `await` in the body. Result is JSON-serialized; non-serializable values become undefined. Logs each call to stderr for auditability.", {
+server.tool("run_javascript", "Run arbitrary JavaScript in the current page context. Gated: disabled unless MARKSMAN_ALLOW_ESCALATED=1 (or the 'Allow escalated tools' plugin toggle), because page content reaches your context and an injected page could induce this call. Once enabled it is the primary tool for stateful SPA work, not a last resort: read live field values, audit which required fields are unanswered across a multi-page form, locate off-screen elements by text, check validation state. Also covers what has no dedicated tool (read localStorage, dismiss a custom dialog, scroll an inner container). The `code` is a function body: use `return X` to send a value back. For Promise-returning code (fetch, IndexedDB, etc.), set `await_promise: true` and use `await` in the body. Result is JSON-serialized; non-serializable values become undefined. Logs each call to stderr for auditability.", {
     code: z
         .string()
         .min(1)
