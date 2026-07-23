@@ -38,15 +38,21 @@ Do **not** use marksman for:
 | `hover_label` | Move mouse to label N without clicking. For hover-revealed menus. |
 | `go_back` / `go_forward` | Browser history navigation. |
 | `wait_for_load` | Wait for `load` \| `domcontentloaded` \| `networkidle`. |
-| `upload_at_label` | Attach a file to label N. Handles both bare `<input type=file>` and buttons or links that open a **native OS file picker**. `path` takes a string or an array. Upload sequentially when slot order matters. |
-| `run_javascript` | Evaluate JS in the page and get the result back. |
+| `upload_at_label` | Attach a file to label N. Handles both bare `<input type=file>` and buttons or links that open a **native OS file picker**. `path` takes a string or an array. Upload sequentially when slot order matters. Gated: needs `MARKSMAN_ALLOW_ESCALATED=1` and `MARKSMAN_UPLOAD_ROOT` (see below). |
+| `run_javascript` | Evaluate JS in the page and get the result back. Gated: needs `MARKSMAN_ALLOW_ESCALATED=1` (see below). |
 | `open_tab` / `switch_tab` / `list_tabs` / `close_tab` | Tab management. Every action tool takes an optional `tab_id` to act on a non-active tab. Popups and `target=_blank` register automatically. |
-| `get_cookies` / `set_cookie` / `clear_cookies` | Cookie access. Shared across all tabs in the session. |
+| `get_cookies` / `set_cookie` / `clear_cookies` | Cookie access. Shared across all tabs in the session. Gated: needs `MARKSMAN_ALLOW_ESCALATED=1` (see below). |
 | `clear_profile` | Wipe the browser profile and restart clean. Logout-like. |
 
-### `run_javascript` is not a last resort
+### Escalated tools are off by default
 
-On stateful SPA forms it is the primary tool, not an escape hatch. Use it to read what a screenshot cannot show you:
+`run_javascript`, `upload_at_label`, `get_cookies`, `set_cookie`, and `clear_cookies` refuse with a `PolicyError` until escalation is enabled. Enable it with `MARKSMAN_ALLOW_ESCALATED=1`, or the "Allow escalated tools" toggle in plugin config. Turning it on is appropriate when you are deliberately driving a target you trust (an authenticated app the user asked you to operate, for example). Leave the gate closed for general browsing and scraping of pages you did not choose, where an injected page could otherwise reach these tools through you.
+
+`upload_at_label` additionally requires `MARKSMAN_UPLOAD_ROOT` (plugin toggle: "Upload root directory") naming the directory files may be read from. Paths outside it are refused.
+
+### `run_javascript`: gated by default, primary once enabled
+
+The gate does not mean the tool is a last resort. On stateful SPA forms, once escalation is enabled, `run_javascript` is the primary tool. Use it to read what a screenshot cannot show you:
 
 - Read the live `.value` of fields you did not just type into.
 - Audit completeness, for example "which radio groups have nothing checked" across a multi-page wizard.
@@ -72,7 +78,7 @@ Every action that can change the URL returns the resulting `url` in its response
 ## Detector choice
 
 - `dom` (default): fast (~10ms), reliable on standard web UIs (real DOM elements). What you want 95% of the time.
-- `omniparser`: vision-based, ~1GB of weights, ~10-20s per inference on CPU. Switch to this only for canvas/WebGL UIs (Figma, Maps, Three.js apps) the DOM walker can't see. Requires running `scripts/setup-omniparser.sh` first.
+- `omniparser`: vision-based, ~1GB of weights, roughly 10-20s per inference on CPU, and the first call is slower still while the sidecar loads the model (timing details in README, Detectors). Switch to this only for canvas/WebGL UIs (Figma, Maps, Three.js apps) the DOM walker can't see. Requires running `scripts/setup-omniparser.sh` first.
 
 Set the default in plugin config; override per-call by passing `detector: "omniparser"` to `screenshot_mark`.
 
