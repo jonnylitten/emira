@@ -1,6 +1,13 @@
 # marksman
 
-Set-of-Marks browser control for LLM agents. Marksman takes a screenshot, overlays numbered labels on every interactive element, and exposes click / type / scroll / etc. keyed by label number. The agent picks "label 14" from the marked image instead of `click(743, 312)`, and labels stay stable when the page reflows.
+Browser control for LLM agents, with two capabilities most browser-automation servers lack:
+
+- **Native file-picker uploads.** `upload_at_label` clicks a styled upload button, catches the OS-level file dialog, and attaches the files. This is what carried a full App Store Connect submission end to end, eight screenshots included (see the [case study](#case-study-a-full-app-store-connect-submission)). Nothing else in the comparison table below does it.
+- **Vision detection for canvas and WebGL.** The OmniParser detector labels clickable elements in canvas-rendered UIs (Figma, Google Maps, Three.js apps), which a DOM walker structurally cannot see.
+
+The interaction model under both is Set-of-Marks: take a screenshot, overlay numbered labels on every interactive element, act by label number. The agent picks "label 14" from the marked image instead of `click(743, 312)`.
+
+Architecturally, marksman is one controller with two surfaces. The same action set ships as a Claude Code plugin speaking MCP (21 tools) and as a loopback HTTP API on `:17542` (21 endpoints), so agent sessions and non-agent callers (batch scripts, cron jobs, services in other languages) get identical primitives.
 
 ```
 ┌─────────────────────────────┐
@@ -71,7 +78,7 @@ Both detectors catch the actual interactive target. Marksman's strict visibility
 | Cookie tools | ✓ (`get`/`set`/scoped `clear`) | ✓ |
 | Multi-tab + auto-registered popups | ✓ (popups via `context.on('page')`) | ✓ |
 | File upload | ✓ (`upload_at_label`) | ✓ |
-| Arbitrary JS escape hatch | ✓ (`run_javascript`) | ✓ |
+| Arbitrary JS execution | ✓ (`run_javascript`) | ✓ |
 | Natural-language label lookup | ✓ (`find_label`, input-synonym aware: combobox/textbox/textarea match "input" queries) | ✗ |
 | Read page text without screenshot | ✓ (`get_page_text` + `main_content_only`) | ✗ |
 | Detector cost reporting | ✓ (`detect_ms` in response) | ✗ |
@@ -84,7 +91,7 @@ Both detectors catch the actual interactive target. Marksman's strict visibility
 | Tool count | 21 MCP tools (mirrored by 21 HTTP endpoints + `GET /healthz`) | ~40 |
 
 **Where marksman's unique:**
-- **OmniParser detector for canvas/WebGL.** Clickable elements in Figma, Google Maps map markers, Three.js apps, WebGL games. No other SoM MCP server has visual detection. ~60s/inference cost so it's a break-glass option, but unique.
+- **OmniParser detector for canvas/WebGL.** Clickable elements in Figma, Google Maps map markers, Three.js apps, WebGL games. No other SoM MCP server has visual detection. Costs roughly 10-20s per inference on CPU (see [Detectors](#detectors)), so it's a break-glass option, but unique.
 - **`find_label`.** Natural-language ranking over the last screenshot's labels. "click the submit button" instead of label-number bookkeeping. Treats input/textarea/textbox/combobox/searchbox/field as input-equivalent, so a query for "search input" correctly ranks a `<input role="combobox">`.
 - **`get_page_text` with `main_content_only`.** Skip Wikipedia/Medium/news-site chrome, read just the article body. No round-trip through a screenshot.
 - **HTTP control surface.** Drive marksman from any language/runtime, not just MCP-speaking agents. Same actions, JSON over `:17542`.
@@ -211,7 +218,7 @@ Every tool that acts on a page takes an optional `tab_id` to address a non-activ
 |---|---|
 | `find_label` / `POST /find_label` | Rank the last screenshot's labels against a natural-language description ("the Submit button"). Returns top matches with scores. |
 | `get_page_text` / `POST /get_text` | Dump page innerText (or one labeled element's detected text). `main_content_only` prefers `<main>`/`<article>`/`[role=main]` over `<body>`. Avoids a screenshot round-trip when you just need to read. |
-| `run_javascript` / `POST /run_javascript` | Run a JS function body in the page. `return X` sends a value back; `await_promise: true` wraps it in an async function. Escape hatch for stateful work the label loop can't express. Every call is logged to stderr. |
+| `run_javascript` / `POST /run_javascript` | Run a JS function body in the page. `return X` sends a value back; `await_promise: true` wraps it in an async function. Gated by default; once enabled for a trusted target it is the primary tool for stateful work the label loop can't express, not a last resort (see the [case study](#case-study-a-full-app-store-connect-submission)). Every call is logged to stderr. |
 
 ### Navigation and tabs
 
@@ -379,7 +386,9 @@ If you point an agent at untrusted pages while a persistent profile holds real c
 | Name | How | Pros | Cons |
 |---|---|---|---|
 | `dom` (default) | Walks the live DOM via `page.evaluate`, picks interactive elements (`a`, `button`, `input`, form controls, `[role=*]`, etc.), filters by visibility, merges associated `<label>` text into form-control text. | Fast (~10ms), no setup, accurate for standard web UIs. | Misses canvas / WebGL elements, and any UI rendered without a real DOM element. |
-| `omniparser` | Python sidecar runs Microsoft's OmniParser (YOLO icon detector + Florence captioner + OCR) over the screenshot pixels. | Catches canvas-rendered UIs (Figma, Maps, etc.), works on any rendered page. | Heavy: ~1GB weights, GPU recommended, seconds per inference. |
+| `omniparser` | Python sidecar runs Microsoft's OmniParser (YOLO icon detector + Florence captioner + OCR) over the screenshot pixels. | Catches canvas-rendered UIs (Figma, Maps, etc.), works on any rendered page. | Heavy: ~1GB weights, GPU recommended, 10-20s per inference on CPU. |
+
+Timing, stated once (other docs reference this): the sidecar currently runs CPU-only, and each inference takes roughly 10 to 20 seconds. The first call in a session is slower still, because it also spawns the Python sidecar and loads about 1GB of model weights. A GPU or Apple's MPS backend would cut inference to a few seconds; that work is tracked in [ROADMAP.md](./ROADMAP.md).
 
 **Select per process:**
 
