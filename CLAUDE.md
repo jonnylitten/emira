@@ -89,7 +89,7 @@ screenshot_mark url fullpage=true   # avoids scroll-then-mark for shorter pages
 - **Using OmniParser for standard forms**: slower and noisier than DOM for HTML UIs
 - **Chaining multiple actions without re-screenshotting**: label 5 after a click is not the same element as label 5 before it
 
-## HTTP surface (for scripts and Pigeon)
+## HTTP surface (for scripts and external pipelines)
 
 Marksman also runs as an HTTP server on `:17542`:
 
@@ -97,4 +97,4 @@ Marksman also runs as an HTTP server on `:17542`:
 node /Users/jkl/code/marksman/dist/http-server.js
 ```
 
-Pigeon's `applicator/filler.ts` talks to this surface. Screenshots are saved to `~/.marksman/shots/` as PNGs. Read them by path rather than shuttling base64.
+This is for callers that can't invoke an in-agent browser assistant: batch scripts, cron jobs, services in another language, any pipeline that needs the same primitives from outside a Claude Code session. Screenshots are saved to `~/.marksman/shots/` as PNGs. Read them by path rather than shuttling base64.
