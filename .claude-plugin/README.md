@@ -1,4 +1,4 @@
-# Marksman
+# Emira
 
 Set-of-Marks browser control for Claude Code. After you install this plugin, Claude can drive a real Chromium browser — clicking buttons, filling forms, reading pages — by picking numbered labels off a screenshot rather than fragile (x, y) coordinates.
 
@@ -12,16 +12,16 @@ Claude will screenshot the page, see "1: input 'Username'" and "2: input 'Passwo
 
 ```bash
 # Add this repo as a local marketplace, then install
-claude plugin marketplace add /path/to/marksman
-claude plugin install marksman@marksman-local
+claude plugin marketplace add /path/to/emira
+claude plugin install emira@emira
 ```
 
-On first session a `SessionStart` hook installs Node deps (Playwright, sharp, MCP SDK) into `~/.claude/plugins/data/marksman-marksman-local/` and downloads the Chromium binary. ~30s once; subsequent sessions are instant.
+On first session a `SessionStart` hook installs Node deps (Playwright, sharp, MCP SDK) into `~/.claude/plugins/data/emira-emira/` and downloads the Chromium binary. ~30s once; subsequent sessions are instant.
 
 To try it for a single session without installing:
 
 ```bash
-claude --plugin-dir /path/to/marksman
+claude --plugin-dir /path/to/emira
 ```
 
 ## What you get
@@ -48,14 +48,14 @@ The plugin also ships a `SKILL.md` that tells Claude *when* to reach for these t
 ## Configure
 
 ```
-/plugin configure marksman@marksman-local
+/plugin configure emira@emira
 ```
 
 | Option | Default | What |
 |---|---|---|
 | `detector` | `dom` | `dom` (fast DOM walker, works for standard web UIs) or `omniparser` (vision-based, catches canvas/WebGL apps like Figma). |
 | `omniparser_path` | — | Absolute path to a cloned `microsoft/OmniParser` repo. Only needed when `detector=omniparser`. |
-| `headless` | `true` | Turn off to watch what marksman does in a visible window. |
+| `headless` | `true` | Turn off to watch what emira does in a visible window. |
 
 Per-call override of the detector is also available — pass `detector: "omniparser"` to `screenshot_mark` for a single screenshot without changing the default.
 
@@ -64,7 +64,7 @@ Per-call override of the detector is also available — pass `detector: "omnipar
 The default DOM detector handles 95% of sites cleanly. For canvas/WebGL UIs (Figma, Google Maps, Three.js apps) you can switch to vision-based detection:
 
 ```bash
-bash /path/to/marksman/scripts/setup-omniparser.sh    # ~15–60 min, ~1GB of weights
+bash /path/to/emira/scripts/setup-omniparser.sh    # ~15–60 min, ~1GB of weights
 ```
 
 Then set the `omniparser_path` plugin option to the cloned repo path, and `detector` to `omniparser`.
@@ -74,8 +74,8 @@ Then set the `omniparser_path` plugin option to the cloned repo path, and `detec
 This is a local-path marketplace, so updates are version-bumped:
 
 ```bash
-# In the marksman repo: bump version in .claude-plugin/plugin.json, then:
-claude plugin update marksman@marksman-local
+# In the emira repo: bump version in .claude-plugin/plugin.json, then:
+claude plugin update emira@emira
 ```
 
 If you want every commit to count as a new version (faster iteration), remove the `version` field from `plugin.json` — Claude Code falls back to the git commit SHA.
@@ -84,17 +84,17 @@ If you want every commit to count as a new version (faster iteration), remove th
 
 | Symptom | Try |
 |---|---|
-| Tools don't appear in a new session | `claude plugin list` — confirm `marksman@marksman-local` is enabled. |
+| Tools don't appear in a new session | `claude plugin list` — confirm `emira@emira` is enabled. |
 | First screenshot is very slow | First session installs Playwright's Chromium (~150MB) and on the omniparser detector loads the model (~15-20s on CPU). One-time per machine / per session. |
 | "Label N not found" error | The label map resets on every `screenshot_mark`. Re-screenshot before the next click. |
-| Browser opens visibly when you want headless | `/plugin configure marksman@marksman-local` and toggle `headless` back to true. |
+| Browser opens visibly when you want headless | `/plugin configure emira@emira` and toggle `headless` back to true. |
 | OmniParser sidecar fails to start | Run `bash scripts/setup-omniparser.sh` first; ensure `omniparser_path` plugin option points at the cloned repo. |
 
 ## Uninstall
 
 ```bash
-claude plugin uninstall marksman@marksman-local           # drops data dir by default
-claude plugin marketplace remove marksman-local           # unregister the marketplace
+claude plugin uninstall emira@emira           # drops data dir by default
+claude plugin marketplace remove emira           # unregister the marketplace
 ```
 
 ---

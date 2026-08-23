@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Python sidecar for marksman's OmniParser detector.
+"""Python sidecar for emira's OmniParser detector.
 
 Long-running process. Loads the OmniParser model once at startup, then serves
 repeated detection requests over line-delimited JSON on stdin/stdout.
@@ -16,9 +16,9 @@ Protocol:
              ]}
 
 Two modes:
-    Default          - imports OmniParser from MARKSMAN_OMNIPARSER_PATH (env)
+    Default          - imports OmniParser from EMIRA_OMNIPARSER_PATH (env)
                        and runs real inference. Fails clearly if not installed.
-    MARKSMAN_OMNI_STUB=1 - skips model load; returns a single dummy element per
+    EMIRA_OMNI_STUB=1 - skips model load; returns a single dummy element per
                        request. Useful for validating the Node↔Python protocol
                        without the ~1GB of weights.
 """
@@ -71,7 +71,7 @@ class StubDetector:
 
 
 class OmniParserDetector:
-    """Real OmniParser detector. Loaded only when MARKSMAN_OMNI_STUB is unset.
+    """Real OmniParser detector. Loaded only when EMIRA_OMNI_STUB is unset.
 
     OmniParser isn't a clean pip package — it's a repo (microsoft/OmniParser)
     you clone and import from directly. We add its repo path to sys.path,
@@ -79,10 +79,10 @@ class OmniParserDetector:
     """
 
     def __init__(self):
-        repo_path = os.environ.get("MARKSMAN_OMNIPARSER_PATH")
+        repo_path = os.environ.get("EMIRA_OMNIPARSER_PATH")
         if not repo_path:
             raise RuntimeError(
-                "MARKSMAN_OMNIPARSER_PATH not set. Point it at your cloned "
+                "EMIRA_OMNIPARSER_PATH not set. Point it at your cloned "
                 "microsoft/OmniParser repository directory."
             )
         repo = Path(repo_path).expanduser().resolve()
@@ -99,11 +99,11 @@ class OmniParserDetector:
             ) from e
 
         yolo_weights = os.environ.get(
-            "MARKSMAN_OMNI_YOLO_WEIGHTS",
+            "EMIRA_OMNI_YOLO_WEIGHTS",
             str(repo / "weights/icon_detect/model.pt"),
         )
         caption_weights = os.environ.get(
-            "MARKSMAN_OMNI_CAPTION_WEIGHTS",
+            "EMIRA_OMNI_CAPTION_WEIGHTS",
             str(repo / "weights/icon_caption"),
         )
 
@@ -167,7 +167,7 @@ class OmniParserDetector:
 
 
 def main():
-    stub = os.environ.get("MARKSMAN_OMNI_STUB") == "1"
+    stub = os.environ.get("EMIRA_OMNI_STUB") == "1"
     try:
         detector = StubDetector() if stub else OmniParserDetector()
     except Exception as e:

@@ -9,7 +9,7 @@ What's shipped, what's next, and what's deliberately out of scope. Living docume
 | MCP server | 21 tools. Interaction: `screenshot_mark`, `click_label`, `type_at_label`, `upload_at_label`, `scroll`, `find_label`, `get_page_text`, `press_key`, `hover_label`, `run_javascript`. Navigation: `go_back`, `go_forward`, `wait_for_load`. Tabs: `open_tab`, `switch_tab`, `list_tabs`, `close_tab`. Session: `get_cookies`, `set_cookie`, `clear_cookies`, `clear_profile`. URL returned by every action that can navigate. |
 | HTTP control surface | Same actions over `POST http://127.0.0.1:17542/<endpoint>`, 21 endpoints plus `GET /healthz`. Loopback-only, bearer-token authenticated, with escalated endpoints gated. Saves screenshots to disk for `Read`-tool consumption. |
 | Detectors | DOM walker (default, ~10ms). OmniParser sidecar (vision-based, catches canvas/WebGL). Selectable via env var or per-call `detector` arg. |
-| Plugin packaging | `.claude-plugin/{plugin.json,marketplace.json}`, SessionStart hook installing Node deps into `${CLAUDE_PLUGIN_DATA}`, ergonomic userConfig. Installable from `github.com/jonnylitten/marksman` (private). |
+| Plugin packaging | `.claude-plugin/{plugin.json,marketplace.json}`, SessionStart hook installing Node deps into `${CLAUDE_PLUGIN_DATA}`, ergonomic userConfig. Installable from `github.com/jonnylitten/emira` (private). |
 | Tests | 27 vitest unit tests over `scoring`, `geometry`, `annotate`. Pure-function coverage; browser integration verified via agent runs. |
 | OmniParser setup | `scripts/setup-omniparser.sh`: Python 3.12 venv, minimal inference deps (no paddleocr/gradio/openai-required-only), three upstream patches applied automatically, weight download via `hf`. |
 
@@ -56,9 +56,9 @@ Optional `main_content_only` arg. Prefers `<main>` / `<article>` / `[role="main"
 
 Borrowed-feature ideas surfaced from a 2026-05-31 comparison against [adityasasidhar/browsercontrol](https://github.com/adityasasidhar/browsercontrol), the only other MCP server doing Set-of-Marks. All items in this pack shipped by 2026-06-01.
 
-**Status as of 2026-06-01:** Marksman went from 11 → 21 tools, closing the table-stakes gaps (multi-tab, cookies, file upload, persistent profile, JS escape hatch) while keeping its unique edges (OmniParser detector, `find_label`, `get_page_text`, HTTP control surface). Where it's still behind: BrowserControl's DevTools surface (console/network/perf, not in roadmap) and session recording (longer-term).
+**Status as of 2026-06-01:** Emira went from 11 → 21 tools, closing the table-stakes gaps (multi-tab, cookies, file upload, persistent profile, JS escape hatch) while keeping its unique edges (OmniParser detector, `find_label`, `get_page_text`, HTTP control surface). Where it's still behind: BrowserControl's DevTools surface (console/network/perf, not in roadmap) and session recording (longer-term).
 
-See the current comparison table in [README.md → "How marksman compares"](./README.md#how-marksman-compares). The items below are kept here for historical/citation continuity.
+See the current comparison table in [README.md → "How emira compares"](./README.md#how-emira-compares). The items below are kept here for historical/citation continuity.
 
 #### ~~7. Cookie tools~~ ✓ shipped
 Three tools: `get_cookies(urls?)`, `set_cookie({name, value, url?|domain?, ...})`, `clear_cookies({name?, domain?, path?})`. Context-level (no `tab_id`; cookies are shared across all tabs in the BrowserContext). All thin wrappers over Playwright's `context.cookies()` / `context.addCookies()` / `context.clearCookies()`. Smoke-tested against httpbin: read, set, scoped clear, full clear all behave correctly.
@@ -67,14 +67,14 @@ Three tools: `get_cookies(urls?)`, `set_cookie({name, value, url?|domain?, ...})
 `upload_at_label(label, path, timeout_ms?)` on MCP / `POST /upload` on HTTP. Two-strategy implementation: first tries `setInputFiles` after resolving the bbox-center element via `elementFromPoint` (handles both direct `<input type="file">` clicks and `<label for=...>` clicks). Falls back to arming a `filechooser` event listener before clicking, which handles buttons/links that open a file dialog. `path` accepts single string or array (for multi-file inputs). Verified end-to-end against `the-internet.herokuapp.com/upload`.
 
 #### ~~10. Session / profile persistence~~ ✓ shipped
-Swapped `chromium.launch()` for `chromium.launchPersistentContext()`. Profile dir resolved by priority: `MARKSMAN_PROFILE_DIR` env > `$CLAUDE_PLUGIN_DATA/profile` (plugin mode, survives updates) > `~/.cache/marksman/profile` (dev/standalone). Plugin manifest exposes a `profile_dir` userConfig knob.
+Swapped `chromium.launch()` for `chromium.launchPersistentContext()`. Profile dir resolved by priority: `EMIRA_PROFILE_DIR` env > `$CLAUDE_PLUGIN_DATA/profile` (plugin mode, survives updates) > `~/.cache/emira/profile` (dev/standalone). Plugin manifest exposes a `profile_dir` userConfig knob.
 
 New `clear_profile` MCP tool / `POST /clear_profile` HTTP endpoint. Wipes the dir and restarts with a fresh context (logout-like). Verified end-to-end: localStorage persists across separate Node processes on https origins; `clear_profile` wipes the dir; next `getPage()` recreates it clean.
 
 **Caveat shipped with it:** file:// URLs don't persist localStorage in chromium's user-data dir (file origins partition differently). https origins work as expected. Persistent contexts take ~1s longer to launch than ephemeral ones.
 
 #### ~~9. `run_javascript` escape hatch~~ ✓ shipped
-`run_javascript(code, await_promise?)` MCP / `POST /run_javascript` HTTP. The code is treated as a function body; use `return X` to send a value back. Wraps in an IIFE (`(() => { code })()`) for sync, `(async () => { code })()` for async. Result JSON-serialized; non-serializable values become undefined. Truncates at 4000 chars in MCP text responses. Each call logged to stderr (`[marksman] run_javascript: …`) for audit visibility; it doesn't pollute MCP stdio.
+`run_javascript(code, await_promise?)` MCP / `POST /run_javascript` HTTP. The code is treated as a function body; use `return X` to send a value back. Wraps in an IIFE (`(() => { code })()`) for sync, `(async () => { code })()` for async. Result JSON-serialized; non-serializable values become undefined. Truncates at 4000 chars in MCP text responses. Each call logged to stderr (`[emira] run_javascript: …`) for audit visibility; it doesn't pollute MCP stdio.
 
 Smoke-tested sync (`return document.title`), async (`return await fetch(...).then(r => r.json())`), localStorage round-trip, and error propagation.
 
@@ -86,14 +86,14 @@ The sidecar runs CPU-only on macOS today; every inference is 10-20s. Apple Silic
 **Why later:** Florence-2 has had MPS compatibility regressions in some transformers releases. Worth waiting for a known-good combination rather than chasing it now.
 
 ### Public marketplace listing
-Currently the repo is private and installation requires being a collaborator. Flipping public unlocks `claude plugin install marksman@marksman` for anyone, but invites issues from people who hit OmniParser setup pain or Apple-Silicon-only paths.
+Currently the repo is private and installation requires being a collaborator. Flipping public unlocks `claude plugin install emira@emira` for anyone, but invites issues from people who hit OmniParser setup pain or Apple-Silicon-only paths.
 
 **Plan:** Public flip is one CLI command (`gh repo edit --visibility public`). Gate on: (a) at least one external test on a Linux + nvidia box, (b) a CI run that validates the plugin builds clean, (c) a release with a real `version` field so installs are reproducible.
 
 ### Session recording (replay debugging)
 Save labelMaps + screenshots to disk so a run that goes wrong can be replayed step-by-step. Distinct from item 10 (browser-state persistence): this is dev-time observability, not user-state continuity.
 
-**Plan:** Opt-in `MARKSMAN_RECORD_DIR` env var. Write each `screenshot_mark` result + each action to a JSONL log in that dir. Add a `scripts/replay.mjs` driver.
+**Plan:** Opt-in `EMIRA_RECORD_DIR` env var. Write each `screenshot_mark` result + each action to a JSONL log in that dir. Add a `scripts/replay.mjs` driver.
 
 ### Scroll-then-mark
 "Find the submit button" on a 5000px page currently requires the agent to scroll-and-screenshot in a loop until it sees the button. A `find_label` variant that scrolls automatically until the described element comes into view would collapse that.
@@ -102,7 +102,7 @@ Save labelMaps + screenshots to disk so a run that goes wrong can be replayed st
 
 ## Open issues
 
-- **`/reload-plugins` leaks Node MCP servers.** Claude Code bug: sometimes spawns a new MCP server without killing the old one, leaving zombies that hold stale code in their Python sidecars. Workaround: `pkill -f marksman/dist/server.js` between iterations. Reported nowhere yet.
+- **`/reload-plugins` leaks Node MCP servers.** Claude Code bug: sometimes spawns a new MCP server without killing the old one, leaving zombies that hold stale code in their Python sidecars. Workaround: `pkill -f emira/dist/server.js` between iterations. Reported nowhere yet.
 - **OmniParser source patches survive on disk but die on re-clone.** If a user blows away `omniparser/OmniParser/` and re-runs the setup script, patches reapply. If they `git pull` inside that dir, patches are lost. Should detect and re-apply.
 - **OmniParser CPU-only.** See longer-term section. ~15s/inference is acceptable for ad-hoc use, painful for any tight loop.
 - **No CI.** Tests run locally only. A GitHub Actions workflow that runs `npm test` on push would catch regressions before they reach the cached plugin.
@@ -111,7 +111,7 @@ Save labelMaps + screenshots to disk so a run that goes wrong can be replayed st
 ## Won't do (reasoning kept so we don't relitigate)
 
 - **Bundle OmniParser weights into the plugin.** ~1GB. Better to keep the setup script and let users opt in once per machine.
-- **Built-in agent loop with OpenAI/Anthropic.** Out of scope. Marksman is a tool surface for an existing agent, not an agent itself. The original OmniParser ships agent loops; we deliberately don't.
+- **Built-in agent loop with OpenAI/Anthropic.** Out of scope. Emira is a tool surface for an existing agent, not an agent itself. The original OmniParser ships agent loops; we deliberately don't.
 - **Auto-restart sidecar when `utils.py` mtime changes.** Tempting fix for the stale-Python-cache problem, but it's a development pain only; production users won't be editing OmniParser source. Solved by `pkill` during dev.
 - **Multi-detector ensemble (DOM + OmniParser merged).** Each detector returns different element categories with different bboxes. Merging would require nontrivial deduplication and offers little vs picking the right detector per page.
 - **Track `dist/` exclusion in `.gitignore`.** It's a shipping artifact for the plugin; the plugin's MCP server runs from `${CLAUDE_PLUGIN_ROOT}/dist/server.js`. Tracking it means commits are noisy but plugin installs are zero-setup.

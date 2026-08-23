@@ -10,26 +10,26 @@ let session = null;
  * Resolve the Chromium user-data directory.
  *
  * Priority:
- *   1. MARKSMAN_PROFILE_DIR (explicit override)
+ *   1. EMIRA_PROFILE_DIR (explicit override)
  *   2. $CLAUDE_PLUGIN_DATA/profile/ (plugin mode — survives plugin updates)
- *   3. ~/.cache/marksman/profile/ (standalone / dev mode)
+ *   3. ~/.cache/emira/profile/ (standalone / dev mode)
  *
  * Cookies, localStorage, IndexedDB, and downloaded files live here and survive
- * across marksman process restarts so authenticated automation tasks don't
+ * across emira process restarts so authenticated automation tasks don't
  * need to log in fresh every session.
  */
 function resolveProfileDir() {
-    const explicit = process.env.MARKSMAN_PROFILE_DIR;
+    const explicit = process.env.EMIRA_PROFILE_DIR;
     if (explicit)
         return explicit;
     const pluginData = process.env.CLAUDE_PLUGIN_DATA;
     if (pluginData)
         return path.join(pluginData, "profile");
-    return path.join(homedir(), ".cache", "marksman", "profile");
+    return path.join(homedir(), ".cache", "emira", "profile");
 }
-/** Parse MARKSMAN_VIEWPORT ("1440x900"). Falls back to a roomy default. */
+/** Parse EMIRA_VIEWPORT ("1440x900"). Falls back to a roomy default. */
 function resolveViewport() {
-    const m = process.env.MARKSMAN_VIEWPORT?.trim().match(/^(\d{3,5})\s*[x×]\s*(\d{3,5})$/i);
+    const m = process.env.EMIRA_VIEWPORT?.trim().match(/^(\d{3,5})\s*[x×]\s*(\d{3,5})$/i);
     if (m)
         return { width: Number(m[1]), height: Number(m[2]) };
     return { width: 1440, height: 900 };
@@ -39,22 +39,22 @@ function resolveViewport() {
  *
  * A persistent profile holds live logged-in sessions, which turns any other
  * weakness into account access. So persistence is opt-in: set
- * MARKSMAN_PERSIST_PROFILE=1 when you genuinely need to stay logged in across
+ * EMIRA_PERSIST_PROFILE=1 when you genuinely need to stay logged in across
  * runs (and tighten everything else when you do). Otherwise each session gets a
  * throwaway profile that is deleted on shutdown.
  */
 function persistProfile() {
-    return /^(1|true)$/i.test(process.env.MARKSMAN_PERSIST_PROFILE ?? "");
+    return /^(1|true)$/i.test(process.env.EMIRA_PERSIST_PROFILE ?? "");
 }
 export async function getTabs() {
     if (!session) {
-        const headless = process.env.MARKSMAN_HEADLESS !== "false";
-        const executablePath = process.env.MARKSMAN_EXECUTABLE_PATH?.trim() || undefined;
+        const headless = process.env.EMIRA_HEADLESS !== "false";
+        const executablePath = process.env.EMIRA_EXECUTABLE_PATH?.trim() || undefined;
         const ephemeral = !persistProfile();
         if (ephemeral)
             await sweepStaleProfiles();
         const profileDir = ephemeral
-            ? await mkdtemp(path.join(tmpdir(), "marksman-profile-"))
+            ? await mkdtemp(path.join(tmpdir(), "emira-profile-"))
             : resolveProfileDir();
         if (!ephemeral) {
             // This directory holds live logged-in sessions, so it gets the strictest
@@ -64,9 +64,9 @@ export async function getTabs() {
             // directory another user can read.
             //
             // When the default location is in use we own the parent too, so harden it
-            // as well. An explicitly configured MARKSMAN_PROFILE_DIR is left alone
+            // as well. An explicitly configured EMIRA_PROFILE_DIR is left alone
             // above its own directory, since that path belongs to the user.
-            const defaultParent = path.join(homedir(), ".cache", "marksman");
+            const defaultParent = path.join(homedir(), ".cache", "emira");
             if (profileDir.startsWith(defaultParent + path.sep)) {
                 ensureSecureDir(defaultParent, "profile parent directory");
             }
@@ -125,7 +125,7 @@ async function removeProfile(dir) {
         await new Promise((r) => setTimeout(r, 250));
     }
     if (existsSync(dir)) {
-        console.error(`[marksman] could not remove temp profile ${dir}`);
+        console.error(`[emira] could not remove temp profile ${dir}`);
     }
 }
 /**
@@ -140,7 +140,7 @@ async function sweepStaleProfiles() {
     try {
         const entries = await readdir(tmpdir(), { withFileTypes: true });
         for (const e of entries) {
-            if (!e.isDirectory() || !e.name.startsWith("marksman-profile-"))
+            if (!e.isDirectory() || !e.name.startsWith("emira-profile-"))
                 continue;
             const full = path.join(tmpdir(), e.name);
             try {

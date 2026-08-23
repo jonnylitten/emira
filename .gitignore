@@ -14,7 +14,7 @@ omniparser/.venv/
 omniparser/OmniParser/
 
 # Local smoke-test output / scratch
-/tmp/marksman/
+/tmp/emira/
 
 # Claude Code auto-memory (per-machine user state)
 memory/

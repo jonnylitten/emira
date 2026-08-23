@@ -32,15 +32,15 @@ import path from "node:path";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { closeBrowser } from "./browser.js";
-import { getMarksman } from "./controller.js";
+import { getEmira } from "./controller.js";
 import { ESCALATED_ENDPOINTS, escalationEnabled, escalationError, ensureSecureDir, PolicyError, } from "./policy.js";
-const PORT = Number(process.env.MARKSMAN_HTTP_PORT ?? 17542);
-const HOST = process.env.MARKSMAN_HTTP_HOST ?? "127.0.0.1";
+const PORT = Number(process.env.EMIRA_HTTP_PORT ?? 17542);
+const HOST = process.env.EMIRA_HTTP_HOST ?? "127.0.0.1";
 // Per-user by construction on every platform. /tmp is shared on Linux, and
 // os.tmpdir() only helps on macOS (where TMPDIR is already per-user), so
 // neither is safe as a default on the shared machines this protects against.
 // Deterministic too, so other local clients can compute the same path.
-const SHOT_DIR = ensureSecureDir(process.env.MARKSMAN_SHOT_DIR ?? path.join(os.homedir(), ".marksman", "shots"), "screenshot directory");
+const SHOT_DIR = ensureSecureDir(process.env.EMIRA_SHOT_DIR ?? path.join(os.homedir(), ".emira", "shots"), "screenshot directory");
 // Escalation policy is declared once in ./policy.ts and enforced inside the
 // controller methods, so the MCP path gets it too. The endpoint check here is
 // an early rejection so HTTP callers get a proper 403 instead of a 500.
@@ -48,10 +48,10 @@ const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 // Shared bearer token. Precedence: explicit env var, then a previously written
 // token file, else a fresh random token. The active token is always written to
 // the file (0600) so local clients discover it without env coordination.
-const TOKEN_FILE = path.join(os.homedir(), ".marksman", "http-token");
+const TOKEN_FILE = path.join(os.homedir(), ".emira", "http-token");
 function resolveToken() {
-    if (process.env.MARKSMAN_HTTP_TOKEN) {
-        return { token: process.env.MARKSMAN_HTTP_TOKEN, generated: false };
+    if (process.env.EMIRA_HTTP_TOKEN) {
+        return { token: process.env.EMIRA_HTTP_TOKEN, generated: false };
     }
     try {
         const existing = readFileSync(TOKEN_FILE, "utf8").trim();
@@ -72,7 +72,7 @@ chmodSync(TOKEN_FILE, 0o600);
 if ((statSync(TOKEN_FILE).mode & 0o777) !== 0o600) {
     throw new Error(`refusing to start: ${TOKEN_FILE} is not mode 600 after chmod.`);
 }
-const m = getMarksman();
+const m = getEmira();
 let shotCounter = 0;
 function readJson(req) {
     return new Promise((resolve, reject) => {
@@ -278,13 +278,13 @@ const server = http.createServer((req, res) => {
     });
 });
 server.listen(PORT, HOST, () => {
-    console.log(`marksman http listening on ${HOST}:${PORT}, shots -> ${SHOT_DIR}`);
+    console.log(`emira http listening on ${HOST}:${PORT}, shots -> ${SHOT_DIR}`);
     if (TOKEN_GENERATED) {
-        console.error(`[marksman] generated auth token (also written to ${TOKEN_FILE}):`);
-        console.error(`[marksman]   ${TOKEN}`);
-        console.error(`[marksman] set MARKSMAN_HTTP_TOKEN to pin a fixed token across restarts.`);
+        console.error(`[emira] generated auth token (also written to ${TOKEN_FILE}):`);
+        console.error(`[emira]   ${TOKEN}`);
+        console.error(`[emira] set EMIRA_HTTP_TOKEN to pin a fixed token across restarts.`);
     }
-    console.error(`[marksman] escalated tools ${escalationEnabled() ? "ENABLED" : "disabled"} ` +
+    console.error(`[emira] escalated tools ${escalationEnabled() ? "ENABLED" : "disabled"} ` +
         `(run_javascript, upload, cookies)`);
 });
 let shuttingDown = false;
@@ -292,14 +292,14 @@ const shutdown = async (signal) => {
     if (shuttingDown)
         return;
     shuttingDown = true;
-    console.error(`[marksman] ${signal} received, closing browser…`);
+    console.error(`[emira] ${signal} received, closing browser…`);
     try {
         await closeBrowser();
     }
     catch (err) {
-        console.error("[marksman] error during browser close:", err);
+        console.error("[emira] error during browser close:", err);
     }
-    console.error("[marksman] shutdown complete");
+    console.error("[emira] shutdown complete");
     server.close(() => process.exit(0));
     // Don't hang forever on lingering keep-alive connections.
     setTimeout(() => process.exit(0), 2000).unref();

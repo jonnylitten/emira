@@ -29,14 +29,14 @@ export const ESCALATED_ENDPOINTS = new Set([
     "/clear_cookies",
 ]);
 export function escalationEnabled() {
-    return /^(1|true)$/i.test(process.env.MARKSMAN_ALLOW_ESCALATED ?? "");
+    return /^(1|true)$/i.test(process.env.EMIRA_ALLOW_ESCALATED ?? "");
 }
 /**
  * The failure has to teach the design, not just deny. A user who hits this
  * should understand why the gate exists without filing a bug.
  */
 export function escalationError(tool) {
-    return (`${tool} is disabled. Set MARKSMAN_ALLOW_ESCALATED=1 (or the "Allow escalated tools" ` +
+    return (`${tool} is disabled. Set EMIRA_ALLOW_ESCALATED=1 (or the "Allow escalated tools" ` +
         `plugin toggle) to enable. Gated because page content reaches the agent's context, so an ` +
         `injected page could invoke it against a browser holding your live sessions. ` +
         `Enable it when you are deliberately driving a target you trust. ` +
@@ -68,11 +68,11 @@ export function assertNavigable(raw) {
     if (/^(169\.254\.|::ffff:169\.254\.)/.test(u.hostname) || u.hostname === "metadata.google.internal") {
         throw new PolicyError(`blocked host: ${u.hostname} (link-local / cloud metadata)`);
     }
-    const allowed = process.env.MARKSMAN_ALLOWED_HOSTS?.trim();
+    const allowed = process.env.EMIRA_ALLOWED_HOSTS?.trim();
     if (allowed) {
         const list = allowed.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
         if (!list.includes(u.hostname.toLowerCase())) {
-            throw new PolicyError(`host not in MARKSMAN_ALLOWED_HOSTS: ${u.hostname} (allowed: ${list.join(", ")})`);
+            throw new PolicyError(`host not in EMIRA_ALLOWED_HOSTS: ${u.hostname} (allowed: ${list.join(", ")})`);
         }
     }
     return u.toString();
@@ -85,9 +85,9 @@ export function assertNavigable(raw) {
  * resolved before the containment check so they cannot escape the root.
  */
 export function assertUploadPath(requested) {
-    const root = process.env.MARKSMAN_UPLOAD_ROOT?.trim();
+    const root = process.env.EMIRA_UPLOAD_ROOT?.trim();
     if (!root) {
-        throw new PolicyError(`upload_at_label is disabled. Set MARKSMAN_UPLOAD_ROOT (or the "Upload root directory" ` +
+        throw new PolicyError(`upload_at_label is disabled. Set EMIRA_UPLOAD_ROOT (or the "Upload root directory" ` +
             `plugin toggle) to the folder holding the files you intend to upload; uploads are ` +
             `confined to it. Gated because an untrusted page could otherwise induce an upload of ` +
             `any file on this machine. See README, Security and threat model.`);
@@ -97,7 +97,7 @@ export function assertUploadPath(requested) {
         realRoot = realpathSync(path.resolve(root));
     }
     catch {
-        throw new PolicyError(`MARKSMAN_UPLOAD_ROOT does not exist: ${root}`);
+        throw new PolicyError(`EMIRA_UPLOAD_ROOT does not exist: ${root}`);
     }
     let realTarget;
     try {
@@ -107,7 +107,7 @@ export function assertUploadPath(requested) {
         throw new PolicyError(`upload file not found: ${requested}`);
     }
     if (realTarget !== realRoot && !realTarget.startsWith(realRoot + path.sep)) {
-        throw new PolicyError(`upload path is outside MARKSMAN_UPLOAD_ROOT: ${requested} resolves to ` +
+        throw new PolicyError(`upload path is outside EMIRA_UPLOAD_ROOT: ${requested} resolves to ` +
             `${realTarget}, which is not inside ${realRoot}`);
     }
     return realTarget;

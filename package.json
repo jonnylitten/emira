@@ -1,10 +1,10 @@
 {
-  "name": "marksman",
+  "name": "emira",
   "version": "0.1.0",
   "description": "MCP server that gives Claude Code vision-based browser control via Set-of-Marks labeling.",
   "type": "module",
   "bin": {
-    "marksman": "dist/server.js"
+    "emira": "dist/server.js"
   },
   "main": "dist/server.js",
   "scripts": {

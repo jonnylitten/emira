@@ -1,17 +1,17 @@
 ---
-name: marksman
-description: Browser automation by Set-of-Marks labeling. Use when the task requires controlling a real web browser, including clicking buttons, filling forms, uploading files, reading interactive pages, navigating, or any UI work that WebFetch can't do. Marksman screenshots the page, overlays numbered labels on every interactive element, and exposes 21 MCP tools keyed by label number.
+name: emira
+description: Browser automation by Set-of-Marks labeling. Use when the task requires controlling a real web browser, including clicking buttons, filling forms, uploading files, reading interactive pages, navigating, or any UI work that WebFetch can't do. Emira screenshots the page, overlays numbered labels on every interactive element, and exposes 21 MCP tools keyed by label number.
 ---
 
-# Marksman
+# Emira
 
 Set-of-Marks browser control. Every interaction is keyed off a numbered, labeled screenshot rather than raw coordinates, so labels stay stable when the page reflows and the model picks `#14` instead of `click(743, 312)`.
 
 ## When to use this
 
-Use marksman when the user wants Claude to drive a browser: fill a form, search a site and follow a result, verify a deployed UI, scrape content behind interactive controls, log into something, etc.
+Use emira when the user wants Claude to drive a browser: fill a form, search a site and follow a result, verify a deployed UI, scrape content behind interactive controls, log into something, etc.
 
-Do **not** use marksman for:
+Do **not** use emira for:
 - Static page reads → `WebFetch` is much cheaper.
 - API calls → `curl` / `fetch` directly.
 - Anything that fits inside a single page load with no interaction.
@@ -38,17 +38,17 @@ Do **not** use marksman for:
 | `hover_label` | Move mouse to label N without clicking. For hover-revealed menus. |
 | `go_back` / `go_forward` | Browser history navigation. |
 | `wait_for_load` | Wait for `load` \| `domcontentloaded` \| `networkidle`. |
-| `upload_at_label` | Attach a file to label N. Handles both bare `<input type=file>` and buttons or links that open a **native OS file picker**. `path` takes a string or an array. Upload sequentially when slot order matters. Gated: needs `MARKSMAN_ALLOW_ESCALATED=1` and `MARKSMAN_UPLOAD_ROOT` (see below). |
-| `run_javascript` | Evaluate JS in the page and get the result back. Gated: needs `MARKSMAN_ALLOW_ESCALATED=1` (see below). |
+| `upload_at_label` | Attach a file to label N. Handles both bare `<input type=file>` and buttons or links that open a **native OS file picker**. `path` takes a string or an array. Upload sequentially when slot order matters. Gated: needs `EMIRA_ALLOW_ESCALATED=1` and `EMIRA_UPLOAD_ROOT` (see below). |
+| `run_javascript` | Evaluate JS in the page and get the result back. Gated: needs `EMIRA_ALLOW_ESCALATED=1` (see below). |
 | `open_tab` / `switch_tab` / `list_tabs` / `close_tab` | Tab management. Every action tool takes an optional `tab_id` to act on a non-active tab. Popups and `target=_blank` register automatically. |
-| `get_cookies` / `set_cookie` / `clear_cookies` | Cookie access. Shared across all tabs in the session. Gated: needs `MARKSMAN_ALLOW_ESCALATED=1` (see below). |
+| `get_cookies` / `set_cookie` / `clear_cookies` | Cookie access. Shared across all tabs in the session. Gated: needs `EMIRA_ALLOW_ESCALATED=1` (see below). |
 | `clear_profile` | Wipe the browser profile and restart clean. Logout-like. |
 
 ### Escalated tools are off by default
 
-`run_javascript`, `upload_at_label`, `get_cookies`, `set_cookie`, and `clear_cookies` refuse with a `PolicyError` until escalation is enabled. Enable it with `MARKSMAN_ALLOW_ESCALATED=1`, or the "Allow escalated tools" toggle in plugin config. Turning it on is appropriate when you are deliberately driving a target you trust (an authenticated app the user asked you to operate, for example). Leave the gate closed for general browsing and scraping of pages you did not choose, where an injected page could otherwise reach these tools through you.
+`run_javascript`, `upload_at_label`, `get_cookies`, `set_cookie`, and `clear_cookies` refuse with a `PolicyError` until escalation is enabled. Enable it with `EMIRA_ALLOW_ESCALATED=1`, or the "Allow escalated tools" toggle in plugin config. Turning it on is appropriate when you are deliberately driving a target you trust (an authenticated app the user asked you to operate, for example). Leave the gate closed for general browsing and scraping of pages you did not choose, where an injected page could otherwise reach these tools through you.
 
-`upload_at_label` additionally requires `MARKSMAN_UPLOAD_ROOT` (plugin toggle: "Upload root directory") naming the directory files may be read from. Paths outside it are refused.
+`upload_at_label` additionally requires `EMIRA_UPLOAD_ROOT` (plugin toggle: "Upload root directory") naming the directory files may be read from. Paths outside it are refused.
 
 ### `run_javascript`: gated by default, primary once enabled
 
@@ -72,7 +72,7 @@ Every action that can change the URL returns the resulting `url` in its response
 
 - Don't carry label numbers across screenshots. They reset every `screenshot_mark` call. If you need to act again, re-screenshot.
 - Don't fullpage-screenshot a long article to read it. `get_page_text` exists.
-- Don't try to compute (x, y) yourself. Marksman owns the bbox math; you only pick labels.
+- Don't try to compute (x, y) yourself. Emira owns the bbox math; you only pick labels.
 - Don't ignore the URL returned by action tools. Confirming you landed where you expected saves a screenshot.
 
 ## Detector choice
@@ -84,4 +84,4 @@ Set the default in plugin config; override per-call by passing `detector: "omnip
 
 ## Headless or visible
 
-By default Chromium runs headless. Toggle "Headless browser" off in plugin config to watch what marksman does. Useful when debugging a flow that's misbehaving.
+By default Chromium runs headless. Toggle "Headless browser" off in plugin config to watch what emira does. Useful when debugging a flow that's misbehaving.

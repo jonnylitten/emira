@@ -1,12 +1,12 @@
 {
-  "name": "marksman",
-  "description": "Marksman plugin marketplace — Set-of-Marks browser control for Claude Code.",
+  "name": "emira",
+  "description": "Emira plugin marketplace — Set-of-Marks browser control for Claude Code.",
   "owner": {
     "name": "Jonny Litten"
   },
   "plugins": [
     {
-      "name": "marksman",
+      "name": "emira",
       "source": "./",
       "description": "Set-of-Marks browser control for Claude Code via Playwright."
     }

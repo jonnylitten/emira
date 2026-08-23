@@ -15,7 +15,7 @@ import { detect, defaultDetector, } from "./detector.js";
  * its own labelMap and elements list, scoped to that tab's most recent
  * screenshot. See ./tabs.ts.
  */
-export class Marksman {
+export class Emira {
     async screenshot(opts = {}) {
         const tab = (await getTabs()).get(opts.tab_id);
         const { page } = tab;
@@ -36,7 +36,7 @@ export class Marksman {
         // Heavy pages (large media uploaders, many webfonts) can hang a full-page
         // capture past the default timeout. Falling back to the viewport beats
         // failing the whole call, since the label map is what callers act on.
-        const shotTimeout = Number(process.env.MARKSMAN_SHOT_TIMEOUT_MS ?? 15000);
+        const shotTimeout = Number(process.env.EMIRA_SHOT_TIMEOUT_MS ?? 15000);
         let fullBuf;
         try {
             fullBuf = await page.screenshot({
@@ -48,7 +48,7 @@ export class Marksman {
         catch (err) {
             if (!opts.fullpage)
                 throw err;
-            console.error(`[marksman] full-page capture failed (${err.message}); ` +
+            console.error(`[emira] full-page capture failed (${err.message}); ` +
                 `falling back to viewport capture`);
             fullBuf = await page.screenshot({
                 type: "png",
@@ -162,7 +162,7 @@ export class Marksman {
         const tab = (await getTabs()).get(tab_id);
         const bbox = this.requireLabel(tab, label);
         const { page } = tab;
-        // Confine to MARKSMAN_UPLOAD_ROOT before anything touches the page.
+        // Confine to EMIRA_UPLOAD_ROOT before anything touches the page.
         const fileList = (Array.isArray(files) ? files : [files]).map(assertUploadPath);
         const cx = bbox.x + bbox.w / 2;
         const cy = bbox.y + bbox.h / 2;
@@ -247,7 +247,7 @@ export class Marksman {
         const wrapped = awaitPromise
             ? `(async () => { ${code} })()`
             : `(() => { ${code} })()`;
-        console.error(`[marksman] run_javascript${awaitPromise ? " (await)" : ""} (tab ${tab.id}): ${code.slice(0, 200)}${code.length > 200 ? "…" : ""}`);
+        console.error(`[emira] run_javascript${awaitPromise ? " (await)" : ""} (tab ${tab.id}): ${code.slice(0, 200)}${code.length > 200 ? "…" : ""}`);
         const result = await tab.page.evaluate(wrapped);
         return { result, url: tab.page.url(), tab_id: tab.id };
     }
@@ -364,9 +364,9 @@ async function ensureCropped(buf, r) {
         .toBuffer();
 }
 let instance = null;
-export function getMarksman() {
+export function getEmira() {
     if (!instance)
-        instance = new Marksman();
+        instance = new Emira();
     return instance;
 }
 //# sourceMappingURL=controller.js.map

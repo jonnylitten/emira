@@ -1,4 +1,4 @@
-# Minimal OmniParser inference dependencies for marksman.
+# Minimal OmniParser inference dependencies for emira.
 #
 # OmniParser's own requirements.txt pulls in gradio, streamlit, anthropic,
 # openai, paddlepaddle, etc. — its demo/agent app stack. We only need the

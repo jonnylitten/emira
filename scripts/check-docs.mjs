@@ -18,7 +18,7 @@ const DOCS = [
   "README.md",
   "CLAUDE.md",
   "ROADMAP.md",
-  "skills/marksman/SKILL.md",
+  "skills/emira/SKILL.md",
   "docs/field-report-2026-07-app-store-connect.md",
 ];
 const errors = [];
@@ -34,15 +34,15 @@ const userConfigKeys = Object.keys(JSON.parse(read(".claude-plugin/plugin.json")
 const tsFiles = walk("src").filter((f) => f.endsWith(".ts"));
 const envSource = new Set(
   tsFiles
-    .flatMap((f) => read(f).match(/MARKSMAN_[A-Z_]+/g) ?? [])
-    .concat(read("omniparser/infer.py").match(/MARKSMAN_[A-Z_]+/g) ?? []),
+    .flatMap((f) => read(f).match(/EMIRA_[A-Z_]+/g) ?? [])
+    .concat(read("omniparser/infer.py").match(/EMIRA_[A-Z_]+/g) ?? []),
 );
 
 // 1. Every tool/endpoint/route count stated in a doc matches the derived count.
 // The lookbehind skips approximations about other projects ("~8 tools").
 for (const doc of DOCS) {
   const text = read(doc);
-  for (const m of text.matchAll(/(?<![~\d.])(\d+)(?= (?:marksman |MCP |HTTP |POST |stdio )*(?:tools?|endpoints?)\b)/g)) {
+  for (const m of text.matchAll(/(?<![~\d.])(\d+)(?= (?:emira |MCP |HTTP |POST |stdio )*(?:tools?|endpoints?)\b)/g)) {
     if (Number(m[1]) !== toolCount) {
       errors.push(`${doc}: states "${m[0]}" tools/endpoints, source has ${toolCount}`);
     }
@@ -84,7 +84,7 @@ if (claim) {
 
 // 3. Env vars: everything the source reads is documented in README, and
 // everything README documents is actually read somewhere (TS or the sidecar).
-const envDocumented = new Set(readme.match(/MARKSMAN_[A-Z_]+/g) ?? []);
+const envDocumented = new Set(readme.match(/EMIRA_[A-Z_]+/g) ?? []);
 for (const v of envSource) {
   if (!envDocumented.has(v)) errors.push(`env var ${v} is read by source but not documented in README`);
 }

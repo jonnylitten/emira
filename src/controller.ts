@@ -55,7 +55,7 @@ export interface ScreenshotResult {
  * its own labelMap and elements list, scoped to that tab's most recent
  * screenshot. See ./tabs.ts.
  */
-export class Marksman {
+export class Emira {
   async screenshot(opts: ScreenshotOptions = {}): Promise<ScreenshotResult> {
     const tab = (await getTabs()).get(opts.tab_id);
     const { page } = tab;
@@ -75,7 +75,7 @@ export class Marksman {
     // Heavy pages (large media uploaders, many webfonts) can hang a full-page
     // capture past the default timeout. Falling back to the viewport beats
     // failing the whole call, since the label map is what callers act on.
-    const shotTimeout = Number(process.env.MARKSMAN_SHOT_TIMEOUT_MS ?? 15000);
+    const shotTimeout = Number(process.env.EMIRA_SHOT_TIMEOUT_MS ?? 15000);
     let fullBuf: Buffer;
     try {
       fullBuf = await page.screenshot({
@@ -86,7 +86,7 @@ export class Marksman {
     } catch (err) {
       if (!opts.fullpage) throw err;
       console.error(
-        `[marksman] full-page capture failed (${(err as Error).message}); ` +
+        `[emira] full-page capture failed (${(err as Error).message}); ` +
           `falling back to viewport capture`,
       );
       fullBuf = await page.screenshot({
@@ -241,7 +241,7 @@ export class Marksman {
     const tab = (await getTabs()).get(tab_id);
     const bbox = this.requireLabel(tab, label);
     const { page } = tab;
-    // Confine to MARKSMAN_UPLOAD_ROOT before anything touches the page.
+    // Confine to EMIRA_UPLOAD_ROOT before anything touches the page.
     const fileList = (Array.isArray(files) ? files : [files]).map(assertUploadPath);
     const cx = bbox.x + bbox.w / 2;
     const cy = bbox.y + bbox.h / 2;
@@ -362,7 +362,7 @@ export class Marksman {
       : `(() => { ${code} })()`;
 
     console.error(
-      `[marksman] run_javascript${awaitPromise ? " (await)" : ""} (tab ${tab.id}): ${code.slice(0, 200)}${code.length > 200 ? "…" : ""}`,
+      `[emira] run_javascript${awaitPromise ? " (await)" : ""} (tab ${tab.id}): ${code.slice(0, 200)}${code.length > 200 ? "…" : ""}`,
     );
 
     const result = await tab.page.evaluate(wrapped);
@@ -521,8 +521,8 @@ async function ensureCropped(buf: Buffer, r: BBox): Promise<Buffer> {
     .toBuffer();
 }
 
-let instance: Marksman | null = null;
-export function getMarksman(): Marksman {
-  if (!instance) instance = new Marksman();
+let instance: Emira | null = null;
+export function getEmira(): Emira {
+  if (!instance) instance = new Emira();
   return instance;
 }

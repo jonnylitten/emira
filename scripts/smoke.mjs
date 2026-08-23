@@ -1,11 +1,11 @@
-// Drives the marksman server over stdio and exercises every tool against
+// Drives the emira server over stdio and exercises every tool against
 // example.com. Run with: node scripts/smoke.mjs
 import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
 
 const server = spawn("node", ["dist/server.js"], {
   stdio: ["pipe", "pipe", "inherit"],
-  env: { ...process.env, MARKSMAN_HEADLESS: "true" },
+  env: { ...process.env, EMIRA_HEADLESS: "true" },
 });
 
 let buf = "";
@@ -75,8 +75,8 @@ async function main() {
   const text = shot.result.content.find((c) => c.type === "text");
   console.log("text:", text?.text);
   if (image) {
-    writeFileSync("/tmp/marksman-smoke.png", Buffer.from(image.data, "base64"));
-    console.log("saved marked screenshot to /tmp/marksman-smoke.png");
+    writeFileSync("/tmp/emira-smoke.png", Buffer.from(image.data, "base64"));
+    console.log("saved marked screenshot to /tmp/emira-smoke.png");
   }
 
   // Try scroll

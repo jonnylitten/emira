@@ -3,7 +3,7 @@
 // The sidecar is a long-running Python process that loads the OmniParser
 // model once and serves repeated screenshot → element-list requests over
 // line-delimited JSON on stdin/stdout. We spawn it lazily on first detect()
-// and keep it alive for the marksman process lifetime.
+// and keep it alive for the emira process lifetime.
 //
 // Protocol (one JSON object per line):
 //   Sidecar → Node: {"event":"ready"} on startup
@@ -18,20 +18,20 @@ const SIDECAR_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname)
 /**
  * Pick the Python interpreter for the sidecar. Falls through, in order:
  *
- *   1. $MARKSMAN_OMNI_PYTHON — explicit override (full path to python binary).
- *   2. The venv that sits next to $MARKSMAN_OMNIPARSER_PATH. setup-omniparser.sh
+ *   1. $EMIRA_OMNI_PYTHON — explicit override (full path to python binary).
+ *   2. The venv that sits next to $EMIRA_OMNIPARSER_PATH. setup-omniparser.sh
  *      installs the venv at `<parent of repo>/.venv/`, so this is where it
  *      lives when the user ran setup once and is now installing the plugin
  *      via marketplace (cache copies don't include the venv).
  *   3. The venv inside the sidecar dir itself ($CLAUDE_PLUGIN_ROOT/omniparser/.venv).
- *      This is the local-dev path: setup script run inside the marksman repo.
+ *      This is the local-dev path: setup script run inside the emira repo.
  *   4. Bare `python3` on PATH — fails fast with a missing-deps error.
  */
 function resolvePython() {
-    const override = process.env.MARKSMAN_OMNI_PYTHON;
+    const override = process.env.EMIRA_OMNI_PYTHON;
     if (override && existsSync(override))
         return override;
-    const repo = process.env.MARKSMAN_OMNIPARSER_PATH;
+    const repo = process.env.EMIRA_OMNIPARSER_PATH;
     if (repo) {
         const sibling = path.join(path.dirname(repo), ".venv/bin/python");
         if (existsSync(sibling))
@@ -59,7 +59,7 @@ class OmniParserClient {
             const proc = spawn(python, [inferScript], {
                 stdio: ["pipe", "pipe", "pipe"],
                 env: { ...process.env, PYTHONUNBUFFERED: "1" },
-                // Run the sidecar in its own process group so SIGTERM to the marksman
+                // Run the sidecar in its own process group so SIGTERM to the emira
                 // process can reach it via process.kill(-pid). Without this, killing
                 // the parent leaves the Python child blocked on its readline() loop
                 // (it would notice stdin EOF eventually, but only after the next
@@ -146,7 +146,7 @@ class OmniParserClient {
         if (!this.proc)
             throw new Error("OmniParser sidecar not running");
         const id = randomUUID();
-        const tmpDir = path.join(tmpdir(), "marksman-omni");
+        const tmpDir = path.join(tmpdir(), "emira-omni");
         mkdirSync(tmpDir, { recursive: true });
         const imagePath = path.join(tmpDir, `req-${id}.png`);
         writeFileSync(imagePath, screenshot);

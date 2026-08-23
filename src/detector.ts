@@ -11,7 +11,7 @@ export interface DetectContext {
 }
 
 export function defaultDetector(): DetectorName {
-  const env = process.env.MARKSMAN_DETECTOR?.toLowerCase();
+  const env = process.env.EMIRA_DETECTOR?.toLowerCase();
   if (env === "omniparser") return "omniparser";
   return "dom";
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs the OmniParser detector for marksman.
+# Installs the OmniParser detector for emira.
 #
 # This is the heavy path: clones microsoft/OmniParser, creates a Python venv,
 # installs torch + transformers + ultralytics + paddleocr, downloads ~1GB of
@@ -12,9 +12,9 @@
 #                                              # smoke-testing with the stub.
 #
 # After running, set:
-#   export MARKSMAN_DETECTOR=omniparser
-#   export MARKSMAN_OMNIPARSER_PATH="$PWD/omniparser/OmniParser"
-# Then start the marksman server normally — the Python sidecar is spawned
+#   export EMIRA_DETECTOR=omniparser
+#   export EMIRA_OMNIPARSER_PATH="$PWD/omniparser/OmniParser"
+# Then start the emira server normally — the Python sidecar is spawned
 # lazily on first detection.
 
 set -euo pipefail
@@ -71,15 +71,15 @@ source "$VENV_DIR/bin/activate"
 echo "==> Upgrading pip"
 pip install --upgrade pip wheel
 
-echo "==> Installing marksman/omniparser/requirements.txt"
+echo "==> Installing emira/omniparser/requirements.txt"
 pip install -r omniparser/requirements.txt
 
 if [[ "$STUB_ONLY" -eq 1 ]]; then
   cat <<EOF
 
 Stub-mode setup complete. To smoke test the sidecar protocol:
-  export MARKSMAN_OMNI_STUB=1
-  export MARKSMAN_DETECTOR=omniparser
+  export EMIRA_OMNI_STUB=1
+  export EMIRA_DETECTOR=omniparser
   npm run build && node dist/http-server.js
 
 The stub returns one placeholder element per screenshot, which is enough to
@@ -103,7 +103,7 @@ echo "==> Patching OmniParser repo for minimal-deps inference"
 # use_paddleocr=True. We route through easyocr, so neutralize both lines so
 # we don't have to install paddlepaddle (~400MB).
 UTILS_FILE="$REPO_DIR/util/utils.py"
-if [[ -f "$UTILS_FILE" ]] && ! grep -q "marksman: lazy via use_paddleocr=False" "$UTILS_FILE"; then
+if [[ -f "$UTILS_FILE" ]] && ! grep -q "emira: lazy via use_paddleocr=False" "$UTILS_FILE"; then
   python3 - "$UTILS_FILE" <<'PY'
 import sys
 from pathlib import Path
@@ -113,7 +113,7 @@ src = p.read_text()
 # Patch 1: skip eager PaddleOCR import (we route through easyocr).
 src = src.replace(
     "from paddleocr import PaddleOCR",
-    "# from paddleocr import PaddleOCR  # marksman: lazy via use_paddleocr=False",
+    "# from paddleocr import PaddleOCR  # emira: lazy via use_paddleocr=False",
 )
 old_block = """paddle_ocr = PaddleOCR(
     lang='en',  # other lang also available
@@ -126,7 +126,7 @@ old_block = """paddle_ocr = PaddleOCR(
     rec_batch_num=1024)"""
 src = src.replace(
     old_block,
-    "paddle_ocr = None  # marksman: PaddleOCR is unused (use_paddleocr=False routes to easyocr)",
+    "paddle_ocr = None  # emira: PaddleOCR is unused (use_paddleocr=False routes to easyocr)",
 )
 
 # Patch 2: get_som_labeled_img crashes with TypeError when OCR finds no text
@@ -139,7 +139,7 @@ src = src.replace(
     ocr_bbox_elem = [{'type': 'text', 'bbox':box, 'interactivity':False, 'content':txt, 'source': 'box_ocr_content_ocr'} for box, txt in zip(ocr_bbox, ocr_text) if int_box_area(box, w, h) > 0] """,
     """    else:
         print('no ocr bbox!!!')
-        ocr_bbox = []  # marksman: was None — caused TypeError in zip below on text-sparse pages
+        ocr_bbox = []  # emira: was None — caused TypeError in zip below on text-sparse pages
 
     ocr_bbox_elem = [{'type': 'text', 'bbox':box, 'interactivity':False, 'content':txt, 'source': 'box_ocr_content_ocr'} for box, txt in zip(ocr_bbox or [], ocr_text or []) if int_box_area(box, w, h) > 0]""",
 )
@@ -153,7 +153,7 @@ src = src.replace(
     starting_idx = next((i for i, box in enumerate(filtered_boxes_elem) if box['content'] is None), -1)""",
     """    filtered_boxes_elem = sorted(filtered_boxes, key=lambda x: x['content'] is None)
 
-    # marksman: handle the \"nothing detected\" case (image with no icons + no
+    # emira: handle the \"nothing detected\" case (image with no icons + no
     # OCR text — e.g., a map tile or unrecognizable WebGL frame). Without this
     # the pipeline crashes on box_convert with a shape-[0] tensor.
     if not filtered_boxes_elem:
@@ -176,7 +176,7 @@ fi
 # already, so no downstream coord remap needed. Fixes small-UI-text garble
 # like "Sign iIn" / "olrvine" on dense rendered pages (e.g. Google Maps).
 OMNI_FILE="$REPO_DIR/util/omniparser.py"
-if [[ -f "$OMNI_FILE" ]] && ! grep -q "marksman: mag_ratio 2×" "$OMNI_FILE"; then
+if [[ -f "$OMNI_FILE" ]] && ! grep -q "emira: mag_ratio 2×" "$OMNI_FILE"; then
   python3 - "$OMNI_FILE" <<'PY'
 import sys
 from pathlib import Path
@@ -184,7 +184,7 @@ p = Path(sys.argv[1])
 src = p.read_text()
 src = src.replace(
     "easyocr_args={'text_threshold': 0.8}",
-    "easyocr_args={'text_threshold': 0.8, 'mag_ratio': 2.0}  # marksman: mag_ratio 2× detection upscale for small UI text",
+    "easyocr_args={'text_threshold': 0.8, 'mag_ratio': 2.0}  # emira: mag_ratio 2× detection upscale for small UI text",
 )
 p.write_text(src)
 PY
@@ -223,10 +223,10 @@ cat <<EOF
 ==> OmniParser setup complete.
 
 To use the OmniParser detector:
-  export MARKSMAN_DETECTOR=omniparser
-  export MARKSMAN_OMNIPARSER_PATH="$PWD/$REPO_DIR"
+  export EMIRA_DETECTOR=omniparser
+  export EMIRA_OMNIPARSER_PATH="$PWD/$REPO_DIR"
   npm run build && node dist/http-server.js
 
 Switch back to DOM detector at any time with:
-  unset MARKSMAN_DETECTOR     # or set to 'dom'
+  unset EMIRA_DETECTOR     # or set to 'dom'
 EOF

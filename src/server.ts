@@ -3,10 +3,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { closeBrowser } from "./browser.js";
-import { getMarksman } from "./controller.js";
+import { getEmira } from "./controller.js";
 
-const server = new McpServer({ name: "marksman", version: "0.3.0" });
-const m = getMarksman();
+const server = new McpServer({ name: "emira", version: "0.3.0" });
+const m = getEmira();
 
 const RegionSchema = z
   .object({
@@ -42,7 +42,7 @@ server.tool(
       .enum(["dom", "omniparser"])
       .optional()
       .describe(
-        "Override the default detector. 'dom' walks the live DOM (fast, no setup). 'omniparser' uses a visual model (catches canvas/WebGL UIs; requires Python sidecar — run scripts/setup-omniparser.sh first). Default comes from MARKSMAN_DETECTOR env, falling back to 'dom'.",
+        "Override the default detector. 'dom' walks the live DOM (fast, no setup). 'omniparser' uses a visual model (catches canvas/WebGL UIs; requires Python sidecar — run scripts/setup-omniparser.sh first). Default comes from EMIRA_DETECTOR env, falling back to 'dom'.",
       ),
     interactive_only: z
       .boolean()
@@ -125,7 +125,7 @@ server.tool(
 
 server.tool(
   "upload_at_label",
-  "Upload one or more files via a labeled file input or upload button. Works for direct <input type='file'> elements AND for buttons/links that open a file picker on click. `path` is an absolute path on the marksman host's filesystem. Pass an array for multi-file inputs.",
+  "Upload one or more files via a labeled file input or upload button. Works for direct <input type='file'> elements AND for buttons/links that open a file picker on click. `path` is an absolute path on the emira host's filesystem. Pass an array for multi-file inputs.",
   {
     label: z.number().int().positive(),
     path: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
@@ -306,7 +306,7 @@ server.tool(
 
 server.tool(
   "run_javascript",
-  "Run arbitrary JavaScript in the current page context. Gated: disabled unless MARKSMAN_ALLOW_ESCALATED=1 (or the 'Allow escalated tools' plugin toggle), because page content reaches your context and an injected page could induce this call. Once enabled it is the primary tool for stateful SPA work, not a last resort: read live field values, audit which required fields are unanswered across a multi-page form, locate off-screen elements by text, check validation state. Also covers what has no dedicated tool (read localStorage, dismiss a custom dialog, scroll an inner container). The `code` is a function body: use `return X` to send a value back. For Promise-returning code (fetch, IndexedDB, etc.), set `await_promise: true` and use `await` in the body. Result is JSON-serialized; non-serializable values become undefined. Logs each call to stderr for auditability.",
+  "Run arbitrary JavaScript in the current page context. Gated: disabled unless EMIRA_ALLOW_ESCALATED=1 (or the 'Allow escalated tools' plugin toggle), because page content reaches your context and an injected page could induce this call. Once enabled it is the primary tool for stateful SPA work, not a last resort: read live field values, audit which required fields are unanswered across a multi-page form, locate off-screen elements by text, check validation state. Also covers what has no dedicated tool (read localStorage, dismiss a custom dialog, scroll an inner container). The `code` is a function body: use `return X` to send a value back. For Promise-returning code (fetch, IndexedDB, etc.), set `await_promise: true` and use `await` in the body. Result is JSON-serialized; non-serializable values become undefined. Logs each call to stderr for auditability.",
   {
     code: z
       .string()
@@ -563,6 +563,6 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 main().catch((err) => {
-  console.error("marksman fatal:", err);
+  console.error("emira fatal:", err);
   process.exit(1);
 });

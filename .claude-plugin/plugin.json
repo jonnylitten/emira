@@ -1,13 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
-  "name": "marksman",
-  "displayName": "Marksman",
+  "name": "emira",
+  "displayName": "Emira",
   "description": "Set-of-Marks vision-based browser control for Claude Code. Screenshot any page, get numbered labels on every interactive element, click and type by label number instead of fragile coordinates.",
   "author": {
     "name": "Jonny Litten",
     "url": "https://github.com/jonnylitten"
   },
-  "repository": "https://github.com/jonnylitten/marksman",
+  "repository": "https://github.com/jonnylitten/emira",
   "license": "MIT",
   "keywords": ["browser", "automation", "playwright", "vision", "set-of-marks", "web", "scraping"],
   "userConfig": {
@@ -25,7 +25,7 @@
     "headless": {
       "type": "boolean",
       "title": "Headless browser",
-      "description": "Run Chromium without a window. Turn off to watch what marksman does.",
+      "description": "Run Chromium without a window. Turn off to watch what emira does.",
       "default": true
     },
     "executable_path": {
@@ -49,7 +49,7 @@
     "persist_profile": {
       "type": "boolean",
       "title": "Persist browser profile",
-      "description": "Off by default: each session gets a throwaway profile that is deleted on shutdown. Turn this on to stay logged in across runs (needed for flows like App Store Connect that require an authenticated session). Understand the tradeoff: a persistent profile means the browser holds real credentials, so anything that can drive marksman can act as you on those sites.",
+      "description": "Off by default: each session gets a throwaway profile that is deleted on shutdown. Turn this on to stay logged in across runs (needed for flows like App Store Connect that require an authenticated session). Understand the tradeoff: a persistent profile means the browser holds real credentials, so anything that can drive emira can act as you on those sites.",
       "default": false
     },
     "profile_dir": {
@@ -65,20 +65,20 @@
     }
   },
   "mcpServers": {
-    "marksman": {
+    "emira": {
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/dist/server.js"],
       "env": {
         "NODE_PATH": "${CLAUDE_PLUGIN_DATA}/node_modules",
-        "MARKSMAN_DETECTOR": "${user_config.detector}",
-        "MARKSMAN_OMNIPARSER_PATH": "${user_config.omniparser_path}",
-        "MARKSMAN_HEADLESS": "${user_config.headless}",
-        "MARKSMAN_ALLOW_ESCALATED": "${user_config.allow_escalated}",
-        "MARKSMAN_UPLOAD_ROOT": "${user_config.upload_root}",
-        "MARKSMAN_PERSIST_PROFILE": "${user_config.persist_profile}",
-        "MARKSMAN_PROFILE_DIR": "${user_config.profile_dir}",
-        "MARKSMAN_VIEWPORT": "${user_config.viewport}",
-        "MARKSMAN_EXECUTABLE_PATH": "${user_config.executable_path}"
+        "EMIRA_DETECTOR": "${user_config.detector}",
+        "EMIRA_OMNIPARSER_PATH": "${user_config.omniparser_path}",
+        "EMIRA_HEADLESS": "${user_config.headless}",
+        "EMIRA_ALLOW_ESCALATED": "${user_config.allow_escalated}",
+        "EMIRA_UPLOAD_ROOT": "${user_config.upload_root}",
+        "EMIRA_PERSIST_PROFILE": "${user_config.persist_profile}",
+        "EMIRA_PROFILE_DIR": "${user_config.profile_dir}",
+        "EMIRA_VIEWPORT": "${user_config.viewport}",
+        "EMIRA_EXECUTABLE_PATH": "${user_config.executable_path}"
       }
     }
   }

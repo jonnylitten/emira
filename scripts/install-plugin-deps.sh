@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# SessionStart hook for the marksman plugin.
+# SessionStart hook for the emira plugin.
 #
-# Installs marksman's Node dependencies into $CLAUDE_PLUGIN_DATA on first
+# Installs emira's Node dependencies into $CLAUDE_PLUGIN_DATA on first
 # session and re-runs `npm install` only when the bundled package.json has
 # changed (covers plugin updates that bump deps). Also ensures Playwright's
 # Chromium binary is present.
@@ -18,7 +18,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 DATA="${CLAUDE_PLUGIN_DATA:-}"
 
 if [[ -z "$PLUGIN_ROOT" || -z "$DATA" ]]; then
-  echo "marksman: CLAUDE_PLUGIN_ROOT / CLAUDE_PLUGIN_DATA not set; running outside a plugin context — skipping install" >&2
+  echo "emira: CLAUDE_PLUGIN_ROOT / CLAUDE_PLUGIN_DATA not set; running outside a plugin context — skipping install" >&2
   exit 0
 fi
 
@@ -29,7 +29,7 @@ if diff -q "$PLUGIN_ROOT/package.json" "$DATA/package.json" >/dev/null 2>&1; the
   exit 0
 fi
 
-echo "marksman: installing Node deps into $DATA (one-time per plugin version)"
+echo "emira: installing Node deps into $DATA (one-time per plugin version)"
 
 cp "$PLUGIN_ROOT/package.json" "$DATA/package.json"
 if [[ -f "$PLUGIN_ROOT/package-lock.json" ]]; then
@@ -38,7 +38,7 @@ fi
 
 # npm install with --omit=dev — runtime deps only (no vitest, typescript, etc.)
 if ! ( cd "$DATA" && npm install --no-fund --no-audit --omit=dev ); then
-  echo "marksman: npm install failed — clearing stored package.json so next session retries" >&2
+  echo "emira: npm install failed — clearing stored package.json so next session retries" >&2
   rm -f "$DATA/package.json"
   exit 1
 fi
@@ -49,11 +49,11 @@ fi
 if [[ -z "${PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD:-}" ]]; then
   if [[ -x "$DATA/node_modules/.bin/playwright" ]]; then
     if ! ( cd "$DATA" && ./node_modules/.bin/playwright install chromium ); then
-      echo "marksman: Playwright Chromium install failed — clearing stored package.json so next session retries" >&2
+      echo "emira: Playwright Chromium install failed — clearing stored package.json so next session retries" >&2
       rm -f "$DATA/package.json"
       exit 1
     fi
   fi
 fi
 
-echo "marksman: ready"
+echo "emira: ready"

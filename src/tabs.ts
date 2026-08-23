@@ -18,7 +18,7 @@ export interface TabSummary {
 /**
  * Owns the set of open browser tabs for a single BrowserContext. Tabs get a
  * monotonically increasing numeric id assigned at registration time — stable
- * for the marksman process lifetime, easy for an LLM to remember ("tab 2 is
+ * for the emira process lifetime, easy for an LLM to remember ("tab 2 is
  * the OAuth popup"). Closed tab ids are NOT recycled.
  *
  * Each tab owns its own label state — labels are scoped per-screenshot, and
@@ -73,7 +73,7 @@ export class TabRegistry {
       this.tabs.delete(id);
       if (this.activeId === id) {
         // Pick the lowest remaining tab id as the new active, or null if
-        // the registry is empty. The Marksman controller will lazily spawn
+        // the registry is empty. The Emira controller will lazily spawn
         // a fresh tab on the next action if needed.
         const remaining = Array.from(this.tabs.keys()).sort((a, b) => a - b);
         this.activeId = remaining[0] ?? null;
@@ -155,7 +155,7 @@ export class TabRegistry {
 
   /**
    * Close a tab (defaults to active). If it was the last tab, spawn a fresh
-   * blank one so the marksman session is always usable.
+   * blank one so the emira session is always usable.
    */
   async close(
     tabId?: number,
