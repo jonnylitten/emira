@@ -553,14 +553,26 @@ server.tool(
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  // The parent (Claude Code) can go away by simply closing the stdio pipe,
+  // with no SIGINT/SIGTERM. Since we ask Playwright not to install its own
+  // signal cleanup (see browser.ts), nothing else would then close the
+  // browser: the live Chromium connection keeps this process alive, so the
+  // server and its whole Chromium tree orphan (reparent to launchd) and pile
+  // up one per reaped session. Treat transport/stdin close as a shutdown too.
+  transport.onclose = () => void shutdown();
+  process.stdin.on("close", () => void shutdown());
 }
 
+let shuttingDown = false;
 const shutdown = async () => {
+  if (shuttingDown) return; // multiple triggers can race (SIGHUP + stdin close)
+  shuttingDown = true;
   await closeBrowser();
   process.exit(0);
 };
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+process.on("SIGHUP", shutdown);
 
 main().catch((err) => {
   console.error("emira fatal:", err);

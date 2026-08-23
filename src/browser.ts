@@ -3,8 +3,12 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { rm, mkdtemp, readdir, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { TabRegistry } from "./tabs.js";
 import { ensureSecureDir } from "./policy.js";
+
+const execFileP = promisify(execFile);
 
 interface Session {
   context: BrowserContext;
@@ -65,6 +69,9 @@ export async function getTabs(): Promise<TabRegistry> {
     const executablePath = process.env.EMIRA_EXECUTABLE_PATH?.trim() || undefined;
     const ephemeral = !persistProfile();
     if (ephemeral) await sweepStaleProfiles();
+    // Reap any Chromium a previously hard-killed emira left orphaned, before we
+    // launch. Also frees the profile lock a stale persistent browser would hold.
+    await reapOrphanedBrowsers();
     const profileDir = ephemeral
       ? await mkdtemp(path.join(tmpdir(), "emira-profile-"))
       : resolveProfileDir();
@@ -166,6 +173,33 @@ async function sweepStaleProfiles(): Promise<void> {
     }
   } catch {
     // sweeping is best-effort
+  }
+}
+
+/**
+ * Kill Chromium left behind by a previous emira that was hard-killed (SIGKILL
+ * or crash) before graceful shutdown could run. Scoped two ways so it can never
+ * touch a live sibling session's browser or your own Chromium windows: the
+ * process must (1) carry one of emira's own profile paths in its args, and
+ * (2) be orphaned (PPID 1). A live emira's browser still has that emira server
+ * as its parent, so it is never matched.
+ */
+async function reapOrphanedBrowsers(): Promise<void> {
+  const markers = ["emira-profile-", resolveProfileDir()];
+  try {
+    const { stdout } = await execFileP("ps", ["-Ao", "pid=,ppid=,command="]);
+    for (const line of stdout.split("\n")) {
+      const m = line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/);
+      if (!m || m[2] !== "1") continue; // orphans only
+      if (!markers.some((mk) => m[3].includes(mk))) continue; // emira's own only
+      try {
+        process.kill(Number(m[1]), "SIGKILL");
+      } catch {
+        // already gone
+      }
+    }
+  } catch {
+    // best-effort; ps unavailable or non-POSIX
   }
 }
 
