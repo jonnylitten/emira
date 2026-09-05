@@ -65,6 +65,13 @@ export async function detectInteractiveElements(page) {
             "summary",
             "label",
         ].join(",");
+        // Strip stamps from any previous detection pass before re-stamping, so a
+        // label can never resolve to two nodes (old + new) after a re-render. Each
+        // pass owns a fresh, unique set of data-emira-ref values.
+        document
+            .querySelectorAll("[data-emira-ref]")
+            .forEach((e) => e.removeAttribute("data-emira-ref"));
+        let refCounter = 0;
         const viewportW = window.innerWidth;
         const viewportH = window.innerHeight;
         const out = [];
@@ -139,6 +146,8 @@ export async function detectInteractiveElements(page) {
                     .filter(Boolean)
                     .join(" ");
             }
+            const ref = refCounter++;
+            el.setAttribute("data-emira-ref", String(ref));
             out.push({
                 x: rect.left,
                 y: rect.top,
@@ -146,6 +155,7 @@ export async function detectInteractiveElements(page) {
                 h: rect.height,
                 type,
                 text: text || labelText || ariaLabel,
+                ref,
             });
         }
         return out;
@@ -156,6 +166,7 @@ export async function detectInteractiveElements(page) {
         bbox: { x: el.x, y: el.y, w: el.w, h: el.h },
         type: el.type,
         text: el.text,
+        ref: el.ref,
     }));
     const filtered = suppressNested(withBbox, 0.8, (it) => isDirectlyInteractive(it.type));
     return filtered.map((el, i) => ({
@@ -163,6 +174,7 @@ export async function detectInteractiveElements(page) {
         bbox: el.bbox,
         type: el.type,
         text: el.text,
+        ref: el.ref,
         interactive: true, // DOM walker only emits elements from the interactive selector set
     }));
 }

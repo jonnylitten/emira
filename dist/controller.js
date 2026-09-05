@@ -7,6 +7,12 @@ import { bboxIntersects } from "./geometry.js";
 import { assertEscalationAllowed, assertNavigable, assertUploadPath, fencePageContent, } from "./policy.js";
 import { detect, defaultDetector, } from "./detector.js";
 /**
+ * Cap on node-based Playwright actions (click, type, hover, scroll-into-view).
+ * Long enough for a slow render, short enough that a detached or never-actionable
+ * element surfaces as an error in seconds rather than the 30s default hang.
+ */
+const NODE_ACTION_TIMEOUT_MS = 5000;
+/**
  * Owns the active browser session's tab registry. Both the MCP server and the
  * HTTP server route through this class so action semantics stay identical
  * across surfaces.
@@ -126,22 +132,64 @@ export class Emira {
     }
     async click(label, tab_id) {
         const tab = (await getTabs()).get(tab_id);
-        const bbox = this.requireLabel(tab, label);
-        const x = bbox.x + bbox.w / 2;
-        const y = bbox.y + bbox.h / 2;
+        const el = this.requireElement(tab, label);
+        if (el.ref !== undefined) {
+            // Act on the node, not the captured coordinate, so a scroll since the
+            // screenshot cannot drift the click onto a different element.
+            const loc = await this.locateElement(tab, el);
+            await loc.scrollIntoViewIfNeeded({ timeout: NODE_ACTION_TIMEOUT_MS });
+            const box = await loc.boundingBox();
+            await loc.click({ timeout: NODE_ACTION_TIMEOUT_MS });
+            const x = box ? box.x + box.width / 2 : el.bbox.x + el.bbox.w / 2;
+            const y = box ? box.y + box.height / 2 : el.bbox.y + el.bbox.h / 2;
+            return { x, y, url: tab.page.url(), tab_id: tab.id };
+        }
+        // OmniParser: the label is a pixel region with no DOM node, so the
+        // coordinate is all we have. (No URL guard: a click that navigates, e.g. a
+        // link, is a legitimate outcome.)
+        const x = el.bbox.x + el.bbox.w / 2;
+        const y = el.bbox.y + el.bbox.h / 2;
         await tab.page.mouse.click(x, y);
         return { x, y, url: tab.page.url(), tab_id: tab.id };
     }
     async type(label, text, clear, tab_id) {
         const tab = (await getTabs()).get(tab_id);
-        const bbox = this.requireLabel(tab, label);
-        await tab.page.mouse.click(bbox.x + bbox.w / 2, bbox.y + bbox.h / 2);
-        if (clear) {
-            await tab.page.keyboard.press("Meta+A");
-            await tab.page.keyboard.press("Delete");
+        const el = this.requireElement(tab, label);
+        const urlBefore = tab.page.url();
+        if (el.ref !== undefined) {
+            // Resolve and act on the node. This is the fix for the data-loss bug:
+            // clicking a captured coordinate after any scroll could land on a link at
+            // the top of the page and navigate away, destroying a filled form.
+            // Acting on the node scrolls it into view and focuses it; the clear and
+            // the typing then target that guaranteed element.
+            const loc = await this.locateElement(tab, el);
+            await loc.scrollIntoViewIfNeeded({ timeout: NODE_ACTION_TIMEOUT_MS });
+            await loc.click({ timeout: NODE_ACTION_TIMEOUT_MS });
+            if (clear) {
+                await tab.page.keyboard.press("Meta+A");
+                await tab.page.keyboard.press("Delete");
+            }
+            // Real key events (not fill()), so React-controlled inputs register input.
+            await loc.pressSequentially(text, {
+                delay: 30,
+                timeout: NODE_ACTION_TIMEOUT_MS,
+            });
         }
-        await tab.page.keyboard.type(text, { delay: 30 });
-        return { url: tab.page.url(), tab_id: tab.id };
+        else {
+            // OmniParser: coordinate fallback.
+            await tab.page.mouse.click(el.bbox.x + el.bbox.w / 2, el.bbox.y + el.bbox.h / 2);
+            if (clear) {
+                await tab.page.keyboard.press("Meta+A");
+                await tab.page.keyboard.press("Delete");
+            }
+            await tab.page.keyboard.type(text, { delay: 30 });
+        }
+        const urlAfter = tab.page.url();
+        if (urlAfter !== urlBefore) {
+            throw new Error(`type(label ${label}) navigated the page (${urlBefore} -> ${urlAfter}) ` +
+                `instead of typing, so it was aborted. Re-screenshot and retry.`);
+        }
+        return { url: urlAfter, tab_id: tab.id };
     }
     async scroll(direction, amount = 500, tab_id) {
         const tab = (await getTabs()).get(tab_id);
@@ -160,41 +208,71 @@ export class Emira {
     async uploadAtLabel(label, files, timeout_ms = 5000, tab_id) {
         assertEscalationAllowed("upload_at_label");
         const tab = (await getTabs()).get(tab_id);
-        const bbox = this.requireLabel(tab, label);
+        const el = this.requireElement(tab, label);
         const { page } = tab;
         // Confine to EMIRA_UPLOAD_ROOT before anything touches the page.
         const fileList = (Array.isArray(files) ? files : [files]).map(assertUploadPath);
-        const cx = bbox.x + bbox.w / 2;
-        const cy = bbox.y + bbox.h / 2;
-        const inputHandle = await page.evaluateHandle(([x, y]) => {
-            let el = document.elementFromPoint(x, y);
-            if (el &&
-                el.tagName === "LABEL" &&
-                el.htmlFor) {
-                el =
-                    document.getElementById(el.htmlFor) ?? el;
+        const urlBefore = page.url();
+        // Resolve the target to a handle and a click action: by node (DOM detector,
+        // drift-proof) or by coordinate (OmniParser). Following a <label for> to its
+        // control lets a styled upload button resolve to the real file input.
+        let handle;
+        let clickTarget;
+        if (el.ref !== undefined) {
+            const loc = await this.locateElement(tab, el);
+            await loc.scrollIntoViewIfNeeded({ timeout: NODE_ACTION_TIMEOUT_MS });
+            handle = await loc.evaluateHandle((node) => {
+                let e = node;
+                if (e && e.tagName === "LABEL" && e.htmlFor) {
+                    e = document.getElementById(e.htmlFor);
+                }
+                return e &&
+                    e.tagName === "INPUT" &&
+                    e.type === "file"
+                    ? e
+                    : null;
+            });
+            clickTarget = () => loc.click({ timeout: NODE_ACTION_TIMEOUT_MS });
+        }
+        else {
+            const cx = el.bbox.x + el.bbox.w / 2;
+            const cy = el.bbox.y + el.bbox.h / 2;
+            handle = await page.evaluateHandle(([x, y]) => {
+                let e = document.elementFromPoint(x, y);
+                if (e && e.tagName === "LABEL" && e.htmlFor) {
+                    e =
+                        document.getElementById(e.htmlFor) ?? e;
+                }
+                return e &&
+                    e.tagName === "INPUT" &&
+                    e.type === "file"
+                    ? e
+                    : null;
+            }, [cx, cy]);
+            clickTarget = () => page.mouse.click(cx, cy);
+        }
+        const guardNav = () => {
+            const urlAfter = page.url();
+            if (urlAfter !== urlBefore) {
+                throw new Error(`upload(label ${label}) navigated the page (${urlBefore} -> ${urlAfter}). ` +
+                    `Aborted; re-screenshot.`);
             }
-            if (el &&
-                el.tagName === "INPUT" &&
-                el.type === "file") {
-                return el;
-            }
-            return null;
-        }, [cx, cy]);
-        const isFileInput = await inputHandle.evaluate((el) => el !== null);
+        };
+        const isFileInput = await handle.evaluate((n) => n !== null);
         if (isFileInput) {
-            const element = inputHandle.asElement();
+            const element = handle.asElement();
             if (element) {
                 await element.setInputFiles(fileList);
-                await inputHandle.dispose();
+                await handle.dispose();
+                guardNav();
                 return { url: page.url(), count: fileList.length, tab_id: tab.id };
             }
         }
-        await inputHandle.dispose();
+        await handle.dispose();
         const fileChooserPromise = page.waitForEvent("filechooser", {
             timeout: timeout_ms,
         });
-        await page.mouse.click(cx, cy);
+        await clickTarget();
         let chooser;
         try {
             chooser = await fileChooserPromise;
@@ -204,13 +282,23 @@ export class Emira {
                 `(orig: ${err.message})`);
         }
         await chooser.setFiles(fileList);
+        guardNav();
         return { url: page.url(), count: fileList.length, tab_id: tab.id };
     }
     async hoverLabel(label, tab_id) {
         const tab = (await getTabs()).get(tab_id);
-        const bbox = this.requireLabel(tab, label);
-        const x = bbox.x + bbox.w / 2;
-        const y = bbox.y + bbox.h / 2;
+        const el = this.requireElement(tab, label);
+        if (el.ref !== undefined) {
+            const loc = await this.locateElement(tab, el);
+            await loc.scrollIntoViewIfNeeded({ timeout: NODE_ACTION_TIMEOUT_MS });
+            const box = await loc.boundingBox();
+            await loc.hover({ timeout: NODE_ACTION_TIMEOUT_MS });
+            const x = box ? box.x + box.width / 2 : el.bbox.x + el.bbox.w / 2;
+            const y = box ? box.y + box.height / 2 : el.bbox.y + el.bbox.h / 2;
+            return { x, y, url: tab.page.url(), tab_id: tab.id };
+        }
+        const x = el.bbox.x + el.bbox.w / 2;
+        const y = el.bbox.y + el.bbox.h / 2;
         await tab.page.mouse.move(x, y);
         return { x, y, url: tab.page.url(), tab_id: tab.id };
     }
@@ -349,12 +437,30 @@ export class Emira {
         return await tabs.close(tab_id);
     }
     // ───────────────────────────────────────────────────────────────────────
-    requireLabel(tab, label) {
-        const bbox = tab.labelMap[label];
-        if (!bbox) {
+    requireElement(tab, label) {
+        const el = tab.elements.find((e) => e.label === label);
+        if (!el) {
             throw new Error(`Label ${label} not found in tab ${tab.id}. Call screenshot_mark first; the label map is per-tab and resets on each screenshot.`);
         }
-        return bbox;
+        return el;
+    }
+    /**
+     * Resolve a DOM-detector label to a single-element locator by its stamped
+     * `data-emira-ref`, or throw a clear, fast error. A node that the page
+     * re-rendered away matches nothing, and we say so immediately rather than
+     * letting a later action wait out its full timeout on an element that will
+     * never appear. Only called when `el.ref` is defined (DOM detector).
+     */
+    async locateElement(tab, el) {
+        const loc = tab.page.locator(`[data-emira-ref="${el.ref}"]`);
+        const n = await loc.count();
+        if (n === 0) {
+            throw new Error(`Label ${el.label} is no longer in the DOM (the page re-rendered). Re-screenshot and act on the fresh label.`);
+        }
+        if (n > 1) {
+            throw new Error(`Label ${el.label} resolved to ${n} nodes (internal stamp collision). Re-screenshot.`);
+        }
+        return loc;
     }
 }
 async function ensureCropped(buf, r) {
