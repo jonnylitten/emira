@@ -1,6 +1,7 @@
 {
   "name": "emira",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "MCP server that gives Claude Code vision-based browser control via Set-of-Marks labeling.",
   "type": "module",
   "bin": {
