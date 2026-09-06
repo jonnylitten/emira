@@ -64,6 +64,16 @@ function persistProfile(): boolean {
 }
 
 export async function getTabs(): Promise<TabRegistry> {
+  // A browser the user closed (or that crashed) leaves a dead context behind.
+  // Drop the stale session so the guard below relaunches, instead of handing
+  // back a registry whose every call throws "Target ... has been closed" while
+  // list_tabs disguises the dead browser as merely empty. browser() is null for
+  // a persistent context, so `=== false` nulls only when we can positively see
+  // a disconnected browser; the context "close" handler below is the primary
+  // signal.
+  if (session && session.context.browser()?.isConnected() === false) {
+    session = null;
+  }
   if (!session) {
     const headless = process.env.EMIRA_HEADLESS !== "false";
     const executablePath = process.env.EMIRA_EXECUTABLE_PATH?.trim() || undefined;
@@ -102,6 +112,13 @@ export async function getTabs(): Promise<TabRegistry> {
       handleSIGTERM: false,
       handleSIGHUP: false,
       ...(executablePath ? { executablePath } : {}),
+    });
+    // Self-heal: when the browser is closed (the user shuts the window, or it
+    // crashes) the context fires "close". Clear the session so the next tool
+    // call relaunches rather than failing forever on a dead context. Guarded so
+    // a late event from an old context cannot null a newer session.
+    context.on("close", () => {
+      if (session && session.context === context) session = null;
     });
     const tabs = new TabRegistry(context);
     await tabs.ensureAtLeastOne();
