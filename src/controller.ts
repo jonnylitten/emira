@@ -216,6 +216,12 @@ export class Emira {
     const tab = (await getTabs()).get(tab_id);
     const el = this.requireElement(tab, label);
     const urlBefore = tab.page.url();
+    // Cadence: human-ish for short fields, faster for long-form answers, always
+    // real key events so React registers the input. The typing budget scales
+    // with the text, so a long answer is not truncated by the action timeout
+    // (those are exactly the fields worth filling carefully).
+    const delay = text.length > 300 ? 5 : 30;
+    const typeBudget = text.length * delay * 1.5 + NODE_ACTION_TIMEOUT_MS;
     if (el.ref !== undefined) {
       // Resolve and act on the node. This is the fix for the data-loss bug:
       // clicking a captured coordinate after any scroll could land on a link at
@@ -230,10 +236,7 @@ export class Emira {
         await tab.page.keyboard.press("Delete");
       }
       // Real key events (not fill()), so React-controlled inputs register input.
-      await loc.pressSequentially(text, {
-        delay: 30,
-        timeout: NODE_ACTION_TIMEOUT_MS,
-      });
+      await loc.pressSequentially(text, { delay, timeout: typeBudget });
     } else {
       // OmniParser: coordinate fallback.
       await tab.page.mouse.click(
@@ -244,7 +247,7 @@ export class Emira {
         await tab.page.keyboard.press("Meta+A");
         await tab.page.keyboard.press("Delete");
       }
-      await tab.page.keyboard.type(text, { delay: 30 });
+      await tab.page.keyboard.type(text, { delay });
     }
     const urlAfter = tab.page.url();
     if (urlAfter !== urlBefore) {
