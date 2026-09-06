@@ -82,17 +82,36 @@ export async function detectInteractiveElements(page) {
         // <label for="x">Text</label><input id="x">; in both cases the <label>
         // itself isn't separately clickable for our purposes — clicking the input
         // (or its label text via implicit association) is what matters.
+        // A label is redundant only if its target/descendant will ACTUALLY be
+        // labeled. Deciding this against candidateSet (mere selector match) was the
+        // bug: a styled uploader hides its <input type=file> with display:none, so
+        // the input matches the selector but is dropped by the visibility filter,
+        // and the wrapping <label> was then dropped as redundant against it, leaving
+        // the upload button unreachable. Mirror the main loop's eligibility here.
+        const willBeLabeled = (el) => {
+            if (!candidateSet.has(el))
+                return false;
+            const rect = el.getBoundingClientRect();
+            if (rect.width < 4 || rect.height < 4)
+                return false;
+            const style = window.getComputedStyle(el);
+            return !(style.visibility === "hidden" ||
+                style.display === "none" ||
+                style.opacity === "0" ||
+                el.hidden ||
+                el.disabled);
+        };
         const isRedundantLabel = (el) => {
             if (el.tagName.toLowerCase() !== "label")
                 return false;
             const lbl = el;
             if (lbl.htmlFor) {
                 const target = document.getElementById(lbl.htmlFor);
-                if (target && candidateSet.has(target))
+                if (target && willBeLabeled(target))
                     return true;
             }
             for (const desc of Array.from(lbl.querySelectorAll("*"))) {
-                if (candidateSet.has(desc))
+                if (willBeLabeled(desc))
                     return true;
             }
             return false;
