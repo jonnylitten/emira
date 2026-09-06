@@ -83,6 +83,16 @@ export class Emira {
     // capture past the default timeout. Falling back to the viewport beats
     // failing the whole call, since the label map is what callers act on.
     const shotTimeout = Number(process.env.EMIRA_SHOT_TIMEOUT_MS ?? 15000);
+    // Chromium's page.screenshot() can stall past the timeout on pages using CSS
+    // backdrop-filter (Ashby's resume drop-zone, etc.). It only affects
+    // appearance, so neutralize it for the capture. Costs nothing on pages that
+    // don't use it; wrapped in catch since a strict CSP can block addStyleTag.
+    const undoBackdrop = await page
+      .addStyleTag({
+        content:
+          "*{backdrop-filter:none !important;-webkit-backdrop-filter:none !important}",
+      })
+      .catch(() => null);
     let fullBuf: Buffer;
     try {
       fullBuf = await page.screenshot({
@@ -101,6 +111,8 @@ export class Emira {
         fullPage: false,
         timeout: shotTimeout,
       });
+    } finally {
+      await undoBackdrop?.evaluate((el) => (el as Element).remove()).catch(() => {});
     }
 
     const detectorName = opts.detector ?? defaultDetector();
