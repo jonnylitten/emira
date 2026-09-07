@@ -42,8 +42,8 @@ function isDirectlyInteractive(type) {
  * the fact through role+name lookups collides on any page with repeated
  * controls (nav menus, lists of buttons, etc.).
  */
-export async function detectInteractiveElements(page) {
-    const raw = await page.evaluate(() => {
+export async function detectInteractiveElements(page, fullpage = false) {
+    const raw = await page.evaluate((fullpage) => {
         const SELECTOR = [
             "a[href]",
             "button",
@@ -127,11 +127,13 @@ export async function detectInteractiveElements(page) {
             if (rect.width < 4 || rect.height < 4)
                 continue;
             // Skip elements completely outside the viewport. Negative coords or
-            // beyond-viewport elements would land off the screenshot.
-            if (rect.right < 0 ||
-                rect.bottom < 0 ||
-                rect.left > viewportW ||
-                rect.top > viewportH) {
+            // beyond-viewport elements would land off the screenshot — but a fullpage
+            // capture spans the whole document, so keep below-fold elements then.
+            if (!fullpage &&
+                (rect.right < 0 ||
+                    rect.bottom < 0 ||
+                    rect.left > viewportW ||
+                    rect.top > viewportH)) {
                 continue;
             }
             const style = window.getComputedStyle(el);
@@ -168,8 +170,10 @@ export async function detectInteractiveElements(page) {
             const ref = refCounter++;
             el.setAttribute("data-emira-ref", String(ref));
             out.push({
-                x: rect.left,
-                y: rect.top,
+                // Document coords for a fullpage capture (the image spans the page from
+                // its origin); viewport coords otherwise.
+                x: fullpage ? rect.left + window.scrollX : rect.left,
+                y: fullpage ? rect.top + window.scrollY : rect.top,
                 w: rect.width,
                 h: rect.height,
                 type,
@@ -178,7 +182,7 @@ export async function detectInteractiveElements(page) {
             });
         }
         return out;
-    });
+    }, fullpage);
     // Suppress elements whose bbox is more than 80% contained inside another
     // element's bbox — keeps the inner control, drops the wrapping container.
     const withBbox = raw.map((el) => ({

@@ -53,7 +53,7 @@ server.tool(
     tab_id: TabIdField,
   },
   async (args) => {
-    const { image, elements, url, detector, detect_ms, tab_id } =
+    const { image, elements, url, detector, detect_ms, tab_id, notice } =
       await m.screenshot(args);
     const summary = elements
       .slice(0, 40)
@@ -77,7 +77,8 @@ server.tool(
             summary +
             (elements.length > 40
               ? `\n…and ${elements.length - 40} more.`
-              : ""),
+              : "") +
+            (notice ? `\n${notice}` : ""),
         },
       ],
     };

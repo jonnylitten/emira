@@ -166,6 +166,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       detector: result.detector,
       detect_ms: result.detect_ms,
       tab_id: result.tab_id,
+      notice: result.notice,
       labels: result.elements.map((el) => ({
         label: el.label,
         type: el.type,

@@ -8,6 +8,14 @@ export type DetectorName = "dom" | "omniparser";
 export interface DetectContext {
   page: Page;
   screenshot: Buffer;
+  /**
+   * The capture is a full-page screenshot, so the image spans the whole
+   * scrollable page rather than the viewport. The DOM detector uses this to
+   * label below-the-fold elements too (in document coordinates); otherwise it
+   * clips to the viewport, which would leave footer controls in the image but
+   * unlabeled.
+   */
+  fullpage?: boolean;
 }
 
 export function defaultDetector(): DetectorName {
@@ -22,7 +30,7 @@ export async function detect(
 ): Promise<DetectedElement[]> {
   switch (name) {
     case "dom":
-      return detectInteractiveElements(ctx.page);
+      return detectInteractiveElements(ctx.page, ctx.fullpage);
     case "omniparser":
       return detectViaOmniParser(ctx.screenshot);
   }

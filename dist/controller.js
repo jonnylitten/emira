@@ -12,6 +12,8 @@ import { detect, defaultDetector, } from "./detector.js";
  * element surfaces as an error in seconds rather than the 30s default hang.
  */
 const NODE_ACTION_TIMEOUT_MS = 5000;
+/** Above this many labels on a full-page capture, advise region / run_javascript. */
+const FULLPAGE_LABEL_ADVISORY = 50;
 /**
  * Owns the active browser session's tab registry. Both the MCP server and the
  * HTTP server route through this class so action semantics stay identical
@@ -87,6 +89,7 @@ export class Emira {
         let elements = await detect(detectorName, {
             page,
             screenshot: detectionBuf,
+            fullpage: Boolean(opts.fullpage),
         });
         const detect_ms = Math.round(performance.now() - t0);
         if (cropBeforeDetect && r) {
@@ -133,6 +136,13 @@ export class Emira {
         for (const el of elements)
             tab.labelMap[el.label] = el.bbox;
         const marked = await annotateScreenshot(outputBuf, annotationElements);
+        // A full-page capture on a dense page yields a wall of labels over a tall
+        // image, where a region crop or run_javascript is usually clearer. Advise
+        // rather than cap: a cap would drop the very footer controls a full-page
+        // capture exists to reveal (they sort last in document order).
+        const notice = opts.fullpage && elements.length > FULLPAGE_LABEL_ADVISORY
+            ? `${elements.length} labels on a full-page capture; for a dense page, a region crop or run_javascript is usually clearer than acting label-by-label.`
+            : undefined;
         return {
             image: marked,
             elements,
@@ -140,6 +150,7 @@ export class Emira {
             detector: detectorName,
             detect_ms,
             tab_id: tab.id,
+            notice,
         };
     }
     async click(label, tab_id) {

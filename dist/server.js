@@ -39,7 +39,7 @@ server.tool("screenshot_mark", "Take a screenshot of the current page and return
         .describe("Drop non-interactive detections (e.g., OmniParser's static text labels on maps) before labeling. Default: true for omniparser (cuts noise), false for dom (no-op)."),
     tab_id: TabIdField,
 }, async (args) => {
-    const { image, elements, url, detector, detect_ms, tab_id } = await m.screenshot(args);
+    const { image, elements, url, detector, detect_ms, tab_id, notice } = await m.screenshot(args);
     const summary = elements
         .slice(0, 40)
         .map((el) => `${el.label}: ${el.type}${el.text ? ` "${el.text.slice(0, 80)}"` : ""}`)
@@ -57,7 +57,8 @@ server.tool("screenshot_mark", "Take a screenshot of the current page and return
                     summary +
                     (elements.length > 40
                         ? `\n…and ${elements.length - 40} more.`
-                        : ""),
+                        : "") +
+                    (notice ? `\n${notice}` : ""),
             },
         ],
     };

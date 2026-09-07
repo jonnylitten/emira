@@ -49,8 +49,9 @@ function isDirectlyInteractive(type: string): boolean {
  */
 export async function detectInteractiveElements(
   page: Page,
+  fullpage = false,
 ): Promise<DetectedElement[]> {
-  const raw = await page.evaluate(() => {
+  const raw = await page.evaluate((fullpage) => {
     const SELECTOR = [
       "a[href]",
       "button",
@@ -144,12 +145,14 @@ export async function detectInteractiveElements(
       const rect = el.getBoundingClientRect();
       if (rect.width < 4 || rect.height < 4) continue;
       // Skip elements completely outside the viewport. Negative coords or
-      // beyond-viewport elements would land off the screenshot.
+      // beyond-viewport elements would land off the screenshot — but a fullpage
+      // capture spans the whole document, so keep below-fold elements then.
       if (
-        rect.right < 0 ||
-        rect.bottom < 0 ||
-        rect.left > viewportW ||
-        rect.top > viewportH
+        !fullpage &&
+        (rect.right < 0 ||
+          rect.bottom < 0 ||
+          rect.left > viewportW ||
+          rect.top > viewportH)
       ) {
         continue;
       }
@@ -197,8 +200,10 @@ export async function detectInteractiveElements(
       const ref = refCounter++;
       el.setAttribute("data-emira-ref", String(ref));
       out.push({
-        x: rect.left,
-        y: rect.top,
+        // Document coords for a fullpage capture (the image spans the page from
+        // its origin); viewport coords otherwise.
+        x: fullpage ? rect.left + window.scrollX : rect.left,
+        y: fullpage ? rect.top + window.scrollY : rect.top,
         w: rect.width,
         h: rect.height,
         type,
@@ -208,7 +213,7 @@ export async function detectInteractiveElements(
     }
 
     return out;
-  });
+  }, fullpage);
 
   // Suppress elements whose bbox is more than 80% contained inside another
   // element's bbox — keeps the inner control, drops the wrapping container.

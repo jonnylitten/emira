@@ -9,7 +9,7 @@ export function defaultDetector() {
 export async function detect(name, ctx) {
     switch (name) {
         case "dom":
-            return detectInteractiveElements(ctx.page);
+            return detectInteractiveElements(ctx.page, ctx.fullpage);
         case "omniparser":
             return detectViaOmniParser(ctx.screenshot);
     }
